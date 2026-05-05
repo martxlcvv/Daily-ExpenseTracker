@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DrawerMenu from '../components/common/DrawerMenu';
@@ -33,20 +33,19 @@ const DashboardScreen = ({ navigation }) => {
     totalExpenses,
     toggleHideWallet,
     deleteExpense,
-    loading,
   } = useExpenses();
 
   const [refreshing, setRefreshing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
   const fabAnim = useRef(new Animated.Value(0)).current;
+  const headerFadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.spring(fabAnim, {
-      toValue: 1,
-      delay: 400,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.spring(fabAnim, { toValue: 1, delay: 500, useNativeDriver: true, speed: 8 }),
+      Animated.timing(headerFadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+    ]).start();
   }, []);
 
   const onRefresh = async () => {
@@ -54,10 +53,8 @@ const DashboardScreen = ({ navigation }) => {
     setTimeout(() => setRefreshing(false), 800);
   };
 
-  // Today's expenses sorted most recent first
   const recentGroups = groupExpensesByDate(expenses.slice(0, 20));
 
-  // Category breakdown for today
   const categoryTotals = expenses.reduce((acc, exp) => {
     acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
     return acc;
@@ -74,12 +71,28 @@ const DashboardScreen = ({ navigation }) => {
     extrapolate: 'clamp',
   });
 
+  const greetHour = new Date().getHours();
+  const greetLabel =
+    greetHour < 12 ? 'Good morning' :
+    greetHour < 17 ? 'Good afternoon' :
+                     'Good evening';
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} navigation={navigation} />
-      {/* Sticky Header */}
+      {/* Drawer menu — rendered above everything */}
+      <DrawerMenu
+        visible={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        navigation={navigation}
+      />
+
+      {/* Compact sticky header (fades in on scroll) */}
       <Animated.View
-        style={[styles.stickyHeader, { backgroundColor: colors.background, opacity: headerOpacity }]}
+        style={[
+          styles.stickyHeader,
+          { backgroundColor: colors.background, opacity: headerOpacity },
+        ]}
+        pointerEvents="none"
       >
         <Text style={[styles.stickyTitle, { color: colors.text }]}>Dashboard</Text>
       </Animated.View>
@@ -88,157 +101,195 @@ const DashboardScreen = ({ navigation }) => {
         <Animated.ScrollView
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-            useNativeDriver: false,
-          })}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: false }
+          )}
           scrollEventThrottle={16}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
         >
-          {/* Greeting with Avatar */}
-          <View style={styles.greetingSection}>
-            <View style={styles.greetingLeft}>
-              <Text style={[styles.greeting, { color: colors.textSecondary }]}>Good day,</Text>
-              <Text style={[styles.greetingName, { color: colors.text }]}>
-                {settings.firstName || 'User'} 👋
+          <Animated.View style={{ opacity: headerFadeAnim }}>
+            {/* ── Top row: greeting + avatar + menu button ── */}
+            <View style={styles.topRow}>
+              <TouchableOpacity
+                onPress={() => setDrawerOpen(true)}
+                style={[styles.menuBtn, { backgroundColor: colors.surfaceSecondary }]}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="menu" size={22} color={colors.primary} />
+              </TouchableOpacity>
+
+              <View style={styles.greetingCenter}>
+                <Text style={[styles.greetLabel, { color: colors.textSecondary }]}>
+                  {greetLabel},
+                </Text>
+                <Text style={[styles.greetName, { color: colors.text }]} numberOfLines={1}>
+                  {settings.firstName || 'User'} 👋
+                </Text>
+              </View>
+
+              {/* Avatar sits in the top-right corner */}
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Settings')}
+                activeOpacity={0.85}
+              >
+                <UserAvatar
+                  userName={settings.firstName || 'User'}
+                  mascotType={settings.mascotType || 'squirrel'}
+                  size="sm"
+                  customImageUri={settings.avatarImage || null}
+                  totalExpenses={todayTotal}
+                  enableVoice={false}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Speech bubble / assistant message strip */}
+            <View
+              style={[styles.assistantStrip, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '30' }]}
+            >
+              <Text style={{ fontSize: 20 }}>
+                {settings.mascotType === 'rocket' ? '🚀' :
+                 settings.mascotType === 'star'   ? '⭐' :
+                 settings.mascotType === 'heart'  ? '💖' :
+                 settings.mascotType === 'smile'  ? '😊' : '🐿️'}
+              </Text>
+              <Text style={[styles.assistantMsg, { color: colors.primary }]}>
+                {todayTotal > 0
+                  ? `You've spent ${formatCurrency(todayTotal, settings.currency)} today.`
+                  : "No expenses logged today. Stay on budget! 🎯"}
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={() => setDrawerOpen(true)}
-              style={[styles.settingsBtn, { backgroundColor: colors.surfaceSecondary }]}
-            >
-              <MaterialIcons name="menu" size={24} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
 
-          {/* User Avatar */}
-          <View style={styles.avatarContainer}>
-            <UserAvatar 
-              userName={settings.firstName || 'User'} 
-              mascotType={settings.mascotType || 'squirrel'}
-              size="md"
-              customImageUri={settings.avatarImage}
-              totalExpenses={todayTotal}
-              enableVoice={settings.avatarVoice || false}
-            />
-          </View>
-
-          {/* Balance Card */}
-          <BalanceCard
-            walletBalance={settings.walletBalance || 0}
-            hideBalance={settings.hideWallet || false}
-            onToggleHide={toggleHideWallet}
-            totalExpenses={totalExpenses}
-            currency={settings.currency}
-          />
-
-          {/* Summary Cards */}
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Overview</Text>
-          <View style={styles.summaryRow}>
-            <SummaryCard
-              label="Today"
-              amount={todayTotal}
-              icon="today"
-              color="#6C63FF"
+            {/* Balance Card */}
+            <BalanceCard
+              walletBalance={settings.walletBalance || 0}
+              hideBalance={settings.hideWallet || false}
+              onToggleHide={toggleHideWallet}
+              totalExpenses={totalExpenses}
               currency={settings.currency}
             />
-            <View style={{ width: Spacing.sm }} />
-            <SummaryCard
-              label="This Week"
-              amount={weekTotal}
-              icon="date-range"
-              color="#43D9AD"
-              currency={settings.currency}
-            />
-          </View>
 
-          {/* Top Categories */}
-          {topCategories.length > 0 && (
-            <>
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Top Categories</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Analytics')}>
-                  <Text style={[styles.seeAll, { color: colors.primary }]}>See all</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.categoriesScroll}
-              >
-                {topCategories.map((cat) => (
-                  <View
-                    key={cat.id}
-                    style={[
-                      styles.categoryChip,
-                      {
-                        backgroundColor: colors.card,
-                        borderColor: colors.cardBorder,
-                        ...Shadow.sm,
-                        shadowColor: colors.shadow,
-                      },
-                    ]}
-                  >
+            {/* Summary Cards */}
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Overview</Text>
+            <View style={styles.summaryRow}>
+              <SummaryCard
+                label="Today"
+                amount={todayTotal}
+                icon="today"
+                color="#6C63FF"
+                currency={settings.currency}
+              />
+              <View style={{ width: Spacing.sm }} />
+              <SummaryCard
+                label="This Week"
+                amount={weekTotal}
+                icon="date-range"
+                color="#43D9AD"
+                currency={settings.currency}
+              />
+            </View>
+
+            {/* Top Categories */}
+            {topCategories.length > 0 && (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                    Top Categories
+                  </Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Home', { screen: 'Analytics' })}>
+                    <Text style={[styles.seeAll, { color: colors.primary }]}>See all →</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.categoriesScroll}
+                >
+                  {topCategories.map((cat) => (
                     <View
+                      key={cat.id}
                       style={[
-                        styles.categoryChipIcon,
-                        { backgroundColor: isDark ? cat.darkColor : cat.lightColor },
+                        styles.categoryChip,
+                        {
+                          backgroundColor: colors.card,
+                          borderColor: colors.cardBorder,
+                          ...Shadow.sm,
+                          shadowColor: colors.shadow,
+                        },
                       ]}
                     >
-                      <MaterialIcons name={cat.icon} size={18} color={cat.color} />
+                      <View
+                        style={[
+                          styles.categoryChipIcon,
+                          { backgroundColor: isDark ? cat.darkColor : cat.lightColor },
+                        ]}
+                      >
+                        <MaterialIcons name={cat.icon} size={18} color={cat.color} />
+                      </View>
+                      <Text style={[styles.categoryChipName, { color: colors.textSecondary }]}>
+                        {cat.name.split(' ')[0]}
+                      </Text>
+                      <Text style={[styles.categoryChipAmount, { color: colors.text }]}>
+                        {formatCurrency(cat.total, settings.currency)}
+                      </Text>
                     </View>
-                    <Text style={[styles.categoryChipName, { color: colors.textSecondary }]}>
-                      {cat.name.split(' ')[0]}
+                  ))}
+                </ScrollView>
+              </>
+            )}
+
+            {/* Recent Transactions */}
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Recent Expenses
+              </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Home', { screen: 'Expenses' })}>
+                <Text style={[styles.seeAll, { color: colors.primary }]}>See all →</Text>
+              </TouchableOpacity>
+            </View>
+
+            {recentGroups.length === 0 ? (
+              <EmptyState
+                icon="receipt-long"
+                title="No expenses yet"
+                subtitle='Tap the + button to log your first expense'
+              />
+            ) : (
+              recentGroups.slice(0, 3).map((group) => (
+                <View key={group.date}>
+                  <View style={styles.dateHeader}>
+                    <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>
+                      {group.displayDate}
                     </Text>
-                    <Text style={[styles.categoryChipAmount, { color: colors.text }]}>
-                      {formatCurrency(cat.total, settings.currency)}
+                    <Text style={[styles.dateTotalLabel, { color: colors.textSecondary }]}>
+                      {formatCurrency(group.total, settings.currency)}
                     </Text>
                   </View>
-                ))}
-              </ScrollView>
-            </>
-          )}
-
-          {/* Recent Transactions */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Expenses</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Expenses')}>
-              <Text style={[styles.seeAll, { color: colors.primary }]}>See all</Text>
-            </TouchableOpacity>
-          </View>
-
-          {recentGroups.length === 0 ? (
-            <EmptyState
-              icon="receipt-long"
-              title="No expenses yet"
-              subtitle="Tap the + button to log your first expense"
-            />
-          ) : (
-            recentGroups.slice(0, 3).map((group) => (
-              <View key={group.date}>
-                <View style={styles.dateHeader}>
-                  <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>
-                    {group.displayDate}
-                  </Text>
-                  <Text style={[styles.dateTotalLabel, { color: colors.textSecondary }]}>
-                    {formatCurrency(group.total, settings.currency)}
-                  </Text>
+                  {group.items.slice(0, 3).map((expense) => (
+                    <ExpenseItem
+                      key={expense.id}
+                      expense={expense}
+                      currency={settings.currency}
+                      onPress={() =>
+                        navigation.navigate('AddExpense', { expense, mode: 'edit' })
+                      }
+                      onDelete={deleteExpense}
+                    />
+                  ))}
                 </View>
-                {group.items.slice(0, 3).map((expense) => (
-                  <ExpenseItem
-                    key={expense.id}
-                    expense={expense}
-                    currency={settings.currency}
-                    onPress={() =>
-                      navigation.navigate('AddExpense', { expense, mode: 'edit' })
-                    }
-                    onDelete={deleteExpense}
-                  />
-                ))}
-              </View>
-            ))
-          )}
+              ))
+            )}
 
-          <View style={{ height: Layout.tabBarHeight + Spacing['2xl'] }} />
+            <View style={{ height: Layout.tabBarHeight + Spacing['2xl'] }} />
+          </Animated.View>
         </Animated.ScrollView>
       </SafeAreaView>
 
@@ -249,15 +300,22 @@ const DashboardScreen = ({ navigation }) => {
           {
             transform: [
               {
-                scale: fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
+                scale: fabAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 1],
+                }),
               },
             ],
+            opacity: fabAnim,
           },
         ]}
       >
         <TouchableOpacity
           onPress={() => navigation.navigate('AddExpense', { mode: 'add' })}
-          style={[styles.fabBtn, { backgroundColor: colors.primary, ...Shadow.xl, shadowColor: colors.primary }]}
+          style={[
+            styles.fabBtn,
+            { backgroundColor: colors.primary, ...Shadow.xl, shadowColor: colors.primary },
+          ]}
           activeOpacity={0.85}
         >
           <MaterialIcons name="add" size={28} color="#FFFFFF" />
@@ -282,65 +340,44 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   stickyTitle: { fontSize: FontSize.xl, fontWeight: FontWeight.bold },
-  greetingSection: {
+
+  // Top row
+  topRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing['2xl'],
-    gap: Spacing.md,
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+    gap: Spacing.sm,
   },
-  greetingLeft: {
-    flex: 1,
-  },
-  greeting: {
-    fontSize: FontSize.md,
-    marginBottom: 4,
-    color: '#9CA3AF',
-  },
-  greetingName: {
-    fontSize: FontSize['5xl'],
-    fontWeight: FontWeight.extraBold,
-    letterSpacing: -0.8,
-  },
-  settingsBtn: {
-    width: 48,
-    height: 48,
+  menuBtn: {
+    width: 44,
+    height: 44,
     borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarContainer: {
+  greetingCenter: { flex: 1, paddingHorizontal: Spacing.sm },
+  greetLabel: { fontSize: FontSize.sm, marginBottom: 2 },
+  greetName: { fontSize: FontSize.xl, fontWeight: FontWeight.extraBold, letterSpacing: -0.5 },
+
+  // Assistant strip
+  assistantStrip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing['2xl'],
-  },
-  walletCard: {
-    width: '100%',
-    borderRadius: BorderRadius['2xl'],
+    gap: Spacing.sm,
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    marginBottom: Spacing.lg,
     borderWidth: 1,
-    padding: Spacing.lg,
-    marginBottom: Spacing.xl,
   },
-  walletHeader: {
-    marginBottom: Spacing.sm,
-  },
-  walletTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: FontWeight.bold,
-  },
-  walletLabel: {
+  assistantMsg: {
+    flex: 1,
     fontSize: FontSize.sm,
-    marginTop: Spacing.xs,
+    fontWeight: FontWeight.medium,
+    lineHeight: 18,
   },
-  walletAmount: {
-    fontSize: FontSize['4xl'],
-    fontWeight: FontWeight.extraBold,
-    marginTop: Spacing.md,
-    letterSpacing: -1,
-  },
-  walletSub: {
-    fontSize: FontSize.sm,
-    marginTop: Spacing.xs,
-  },
+
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -356,7 +393,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semiBold,
     marginBottom: Spacing.md,
-    letterSpacing: 0.2,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -383,16 +419,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: Spacing.xs,
   },
-  categoryChipName: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semiBold,
-    textAlign: 'left',
-  },
-  categoryChipAmount: {
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.bold,
-    textAlign: 'left',
-  },
+  categoryChipName: { fontSize: FontSize.sm, fontWeight: FontWeight.semiBold },
+  categoryChipAmount: { fontSize: FontSize.base, fontWeight: FontWeight.bold },
   dateHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -400,15 +428,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
     marginTop: Spacing.xs,
   },
-  dateLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.medium,
-    letterSpacing: 0.2,
-  },
-  dateTotalLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.medium,
-  },
+  dateLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.medium, letterSpacing: 0.2 },
+  dateTotalLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.medium },
   fab: {
     position: 'absolute',
     right: Spacing.xl,

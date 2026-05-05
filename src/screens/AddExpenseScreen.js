@@ -11,7 +11,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Button from '../components/common/Button';
@@ -24,25 +24,35 @@ import { CATEGORIES } from '../utils/categories';
 import { formatDateFull } from '../utils/formatters';
 import { ResponsiveSize } from '../utils/responsive';
 
+const CURRENCY_SYMBOL = { PHP: '₱', USD: '$', EUR: '€', GBP: '£', JPY: '¥' };
+
 const AddExpenseScreen = ({ route, navigation }) => {
   const { addExpense, updateExpense, deleteExpense, getExpenseById, settings } = useExpenses();
   const { colors, isDark } = useTheme();
 
-  const expenseId = route?.params?.id;
+  const expenseId   = route?.params?.id;
   const routeExpense = route?.params?.expense || (expenseId ? getExpenseById(expenseId) : null);
-  const mode = route?.params?.mode || 'add';
-  const isEdit = mode === 'edit' && !!routeExpense;
+  const mode        = route?.params?.mode || 'add';
+  const isEdit      = mode === 'edit' && !!routeExpense;
 
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('food');
-  const [name, setName] = useState('');
-  const [note, setNote] = useState('');
-  const [date, setDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [amount,          setAmount]          = useState('');
+  const [category,        setCategory]        = useState('food');
+  const [name,            setName]            = useState('');
+  const [note,            setNote]            = useState('');
+  const [date,            setDate]            = useState(new Date());
+  const [showDatePicker,  setShowDatePicker]  = useState(false);
+  const [saving,          setSaving]          = useState(false);
+  const [errors,          setErrors]          = useState({});
+
+  const slideAnim = useRef(new Animated.Value(40)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    Animated.parallel([
+      Animated.timing(slideAnim, { toValue: 0, duration: 320, useNativeDriver: true }),
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 320, useNativeDriver: true }),
+    ]).start();
+
     if (isEdit && routeExpense) {
       setAmount(String(routeExpense.amount));
       setCategory(routeExpense.category || 'food');
@@ -50,41 +60,32 @@ const AddExpenseScreen = ({ route, navigation }) => {
       setNote(routeExpense.note || '');
       setDate(routeExpense.date ? new Date(routeExpense.date) : new Date());
     }
-  }, [isEdit, routeExpense]);
-
-  const slideAnim = useRef(new Animated.Value(50)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(slideAnim, { toValue: 0, duration: 350, useNativeDriver: true }),
-      Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
-    ]).start();
   }, []);
 
   const validate = () => {
     const errs = {};
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      errs.amount = 'Please enter a valid amount';
-    }
-    if (parseFloat(amount) > 9999999) {
-      errs.amount = 'Amount is too large';
-    }
+    const parsed = parseFloat(amount);
+    if (!amount || isNaN(parsed) || parsed <= 0) errs.amount = 'Enter a valid amount';
+    if (parsed > 9_999_999)                       errs.amount = 'Amount is too large';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
+
+  const getCatName = (catId) =>
+    CATEGORIES.find((c) => c.id === catId)?.name || 'Expense';
 
   const handleSave = async () => {
     if (!validate()) return;
     setSaving(true);
     try {
       const expenseData = {
-        amount: parseFloat(amount),
+        amount:   parseFloat(amount),
         category,
-        name: name.trim() || getCategoryName(category),
-        note: note.trim(),
-        date: date.toISOString(),
+        name:     name.trim() || getCatName(category),
+        note:     note.trim(),
+        date:     date.toISOString(),
       };
+
       if (isEdit && routeExpense) {
         await updateExpense(routeExpense.id, expenseData);
       } else {
@@ -101,30 +102,24 @@ const AddExpenseScreen = ({ route, navigation }) => {
 
   const handleDelete = () => {
     if (!routeExpense) return;
-
-    Alert.alert(
-      'Delete Expense',
-      'Are you sure you want to delete this expense?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
+    Alert.alert('Delete Expense', 'Are you sure you want to delete this expense?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
             await deleteExpense(routeExpense.id);
             navigation.goBack();
-          },
+          } catch (e) {
+            Alert.alert('Error', 'Could not delete expense.');
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  const selectedCategory = CATEGORIES.find((c) => c.id === category);
-
-  const getCategoryName = (catId) => {
-    const cat = CATEGORIES.find((c) => c.id === catId);
-    return cat ? cat.name : 'Expense';
-  };
+  const symbol = CURRENCY_SYMBOL[settings.currency] || settings.currency || '₱';
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -134,7 +129,7 @@ const AddExpenseScreen = ({ route, navigation }) => {
         <View style={[styles.header, { borderBottomColor: colors.separator }]}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
-            style={[styles.backBtn, { backgroundColor: colors.surfaceSecondary }]}
+            style={[styles.iconBtn, { backgroundColor: colors.surfaceSecondary }]}
           >
             <MaterialIcons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>
@@ -144,7 +139,7 @@ const AddExpenseScreen = ({ route, navigation }) => {
           {isEdit ? (
             <TouchableOpacity
               onPress={handleDelete}
-              style={[styles.deleteBtn, { backgroundColor: '#FF525218' }]}
+              style={[styles.iconBtn, { backgroundColor: '#FF525218' }]}
             >
               <MaterialIcons name="delete-outline" size={22} color={colors.danger} />
             </TouchableOpacity>
@@ -165,56 +160,53 @@ const AddExpenseScreen = ({ route, navigation }) => {
             <Animated.View
               style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
             >
-              {/* Amount Input */}
+              {/* Amount */}
               <View
                 style={[
                   styles.amountCard,
                   {
                     backgroundColor: colors.card,
-                    borderColor: errors.amount ? colors.danger : colors.primary + '40',
+                    borderColor: errors.amount ? colors.danger : colors.primary + '50',
                     ...Shadow.md,
                     shadowColor: colors.shadow,
                   },
                 ]}
               >
-                <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>Amount</Text>
+                <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>AMOUNT</Text>
                 <View style={styles.amountRow}>
-                  <Text style={[styles.currencySymbol, { color: colors.primary }]}>
-                    {settings.currency === 'PHP' ? '₱' : settings.currency === 'USD' ? '$' : settings.currency}
-                  </Text>
+                  <Text style={[styles.currencySymbol, { color: colors.primary }]}>{symbol}</Text>
                   <Input
                     value={amount}
                     onChangeText={(v) => {
                       setAmount(v);
-                      if (errors.amount) setErrors({ ...errors, amount: undefined });
+                      if (errors.amount) setErrors((p) => ({ ...p, amount: undefined }));
                     }}
                     placeholder="0.00"
                     keyboardType="decimal-pad"
-                    style={[styles.amountInputContainer]}
+                    style={styles.amountInputWrap}
                     inputStyle={styles.amountInput}
-                    error={errors.amount}
                     autoCapitalize="none"
                   />
                 </View>
-                {errors.amount && (
+                {errors.amount ? (
                   <Text style={[styles.errorMsg, { color: colors.danger }]}>{errors.amount}</Text>
-                )}
+                ) : null}
               </View>
 
-              {/* Name/Description Input */}
+              {/* Name */}
               <Text style={[styles.sectionLabel, { color: colors.text }]}>Description</Text>
               <Input
                 value={name}
                 onChangeText={setName}
-                placeholder="What did you spend on? (e.g., Lunch at cafe)"
+                placeholder="What did you spend on?"
                 icon="text-fields"
               />
 
-              {/* Category Selector */}
+              {/* Category */}
               <Text style={[styles.sectionLabel, { color: colors.text }]}>Category</Text>
               <View style={styles.categoriesGrid}>
                 {CATEGORIES.map((cat) => {
-                  const isSelected = category === cat.id;
+                  const sel = category === cat.id;
                   return (
                     <TouchableOpacity
                       key={cat.id}
@@ -222,11 +214,9 @@ const AddExpenseScreen = ({ route, navigation }) => {
                       style={[
                         styles.categoryItem,
                         {
-                          backgroundColor: isSelected
-                            ? cat.color + '20'
-                            : colors.card,
-                          borderColor: isSelected ? cat.color : colors.cardBorder,
-                          borderWidth: isSelected ? 2 : 1,
+                          backgroundColor: sel ? cat.color + '20' : colors.card,
+                          borderColor:     sel ? cat.color        : colors.cardBorder,
+                          borderWidth:     sel ? 2                : 1,
                           ...Shadow.sm,
                           shadowColor: colors.shadow,
                         },
@@ -235,27 +225,21 @@ const AddExpenseScreen = ({ route, navigation }) => {
                       <View
                         style={[
                           styles.catIcon,
-                          {
-                            backgroundColor: isSelected
-                              ? cat.color + '30'
-                              : isDark
-                              ? cat.darkColor
-                              : cat.lightColor,
-                          },
+                          { backgroundColor: sel ? cat.color + '30' : isDark ? cat.darkColor : cat.lightColor },
                         ]}
                       >
                         <MaterialIcons
                           name={cat.icon}
                           size={24}
-                          color={isSelected ? cat.color : isDark ? cat.color : cat.color + 'CC'}
+                          color={sel ? cat.color : cat.color + 'CC'}
                         />
                       </View>
                       <Text
                         style={[
                           styles.catName,
                           {
-                            color: isSelected ? cat.color : colors.textSecondary,
-                            fontWeight: isSelected ? FontWeight.semiBold : FontWeight.regular,
+                            color:      sel ? cat.color        : colors.textSecondary,
+                            fontWeight: sel ? FontWeight.semiBold : FontWeight.regular,
                           },
                         ]}
                         numberOfLines={2}
@@ -279,16 +263,13 @@ const AddExpenseScreen = ({ route, navigation }) => {
                 maxLength={200}
               />
 
-              {/* Date Picker */}
+              {/* Date */}
               <Text style={[styles.sectionLabel, { color: colors.text }]}>Date</Text>
               <TouchableOpacity
                 onPress={() => setShowDatePicker(true)}
                 style={[
                   styles.dateBtn,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.cardBorder,
-                  },
+                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
                 ]}
               >
                 <MaterialIcons name="event" size={20} color={colors.primary} />
@@ -304,23 +285,21 @@ const AddExpenseScreen = ({ route, navigation }) => {
                   mode="date"
                   display="default"
                   maximumDate={new Date()}
-                  onChange={(event, selectedDate) => {
+                  onChange={(_, selected) => {
                     setShowDatePicker(false);
-                    if (selectedDate) setDate(selectedDate);
+                    if (selected) setDate(selected);
                   }}
                 />
               )}
 
               <View style={{ height: Spacing.xl }} />
 
-              {/* Save Button */}
               <Button
-                title={saving ? 'Saving...' : isEdit ? 'Update Expense' : 'Add Expense'}
+                title={saving ? 'Saving…' : isEdit ? 'Update Expense' : 'Add Expense'}
                 onPress={handleSave}
                 loading={saving}
                 size="lg"
               />
-
               <View style={{ height: Spacing['2xl'] }} />
             </Animated.View>
           </ScrollView>
@@ -341,27 +320,15 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
   },
-  backBtn: {
+  iconBtn: {
     width: 40,
     height: 40,
     borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: FontWeight.bold,
-  },
-  deleteBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scroll: {
-    padding: Layout.screenPadding,
-  },
+  headerTitle: { fontSize: FontSize.lg, fontWeight: FontWeight.bold },
+  scroll: { padding: Layout.screenPadding },
   amountCard: {
     borderRadius: BorderRadius.xl,
     borderWidth: 2,
@@ -370,40 +337,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   amountLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.medium,
-    marginBottom: Spacing.sm,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  amountRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  currencySymbol: {
-    fontSize: FontSize['3xl'],
-    fontWeight: FontWeight.bold,
-    marginRight: Spacing.xs,
-  },
-  amountInputContainer: {
-    flex: 1,
-    marginBottom: 0,
-  },
-  amountInput: {
-    fontSize: FontSize['4xl'],
-    fontWeight: FontWeight.extraBold,
-    textAlign: 'center',
-    letterSpacing: -1,
-  },
-  errorMsg: {
     fontSize: FontSize.xs,
-    marginTop: Spacing.xs,
-  },
-  sectionLabel: {
-    fontSize: FontSize.base,
     fontWeight: FontWeight.semiBold,
-    marginBottom: Spacing.md,
+    letterSpacing: 1,
+    marginBottom: Spacing.sm,
   },
+  amountRow: { flexDirection: 'row', alignItems: 'center' },
+  currencySymbol: { fontSize: FontSize['3xl'], fontWeight: FontWeight.bold, marginRight: Spacing.xs },
+  amountInputWrap: { flex: 1, marginBottom: 0 },
+  amountInput: { fontSize: FontSize['4xl'], fontWeight: FontWeight.extraBold, textAlign: 'center', letterSpacing: -1 },
+  errorMsg: { fontSize: FontSize.xs, marginTop: Spacing.xs },
+  sectionLabel: { fontSize: FontSize.base, fontWeight: FontWeight.semiBold, marginBottom: Spacing.md },
   categoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -428,12 +372,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  catName: {
-    fontSize: ResponsiveSize.isSmallScreen ? FontSize.xs : FontSize.xs,
-    textAlign: 'center',
-    lineHeight: ResponsiveSize.isSmallScreen ? 12 : 14,
-    fontWeight: FontWeight.medium,
-  },
+  catName: { fontSize: FontSize.xs, textAlign: 'center', lineHeight: 14 },
   dateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -443,11 +382,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
     gap: Spacing.sm,
   },
-  dateText: {
-    flex: 1,
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.medium,
-  },
+  dateText: { flex: 1, fontSize: FontSize.base, fontWeight: FontWeight.medium },
 });
 
 export default AddExpenseScreen;

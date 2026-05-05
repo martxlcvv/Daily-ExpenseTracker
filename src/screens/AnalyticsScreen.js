@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { format, subDays } from 'date-fns';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   ScrollView,
@@ -13,6 +13,7 @@ import {
 import { BarChart, PieChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Card from '../components/common/Card';
+import EmptyState from '../components/common/EmptyState';
 import { useExpenses } from '../context/ExpenseContext';
 import { useTheme } from '../context/ThemeContext';
 import { BorderRadius, Layout, Spacing } from '../theme/spacing';
@@ -38,20 +39,24 @@ const AnalyticsScreen = () => {
   const { colors, isDark } = useTheme();
   const { expenses, settings } = useExpenses();
   const [range, setRange] = useState('month');
+  const [pieData, setPieData] = useState([]);
+  const [barData, setBarData] = useState({ labels: [], datasets: [{ data: [0] }] });
 
   const ranges = getDateRanges();
 
   const filteredExpenses = useMemo(() => {
     switch (range) {
-      case 'week':  return filterExpensesByDateRange(expenses, ranges.last7Days.start, ranges.last7Days.end);
-      case 'month': return filterExpensesByDateRange(expenses, ranges.last30Days.start, ranges.last30Days.end);
-      default:      return expenses;
+      case 'week':
+        return filterExpensesByDateRange(expenses, ranges.last7Days.start, ranges.last7Days.end);
+      case 'month':
+        return filterExpensesByDateRange(expenses, ranges.last30Days.start, ranges.last30Days.end);
+      default:
+        return expenses;
     }
   }, [range, expenses]);
 
   const totalSpend = sumExpenses(filteredExpenses);
 
-  // Category breakdown for pie
   const categoryTotals = useMemo(() => {
     const totals = {};
     filteredExpenses.forEach((e) => {
@@ -61,17 +66,20 @@ const AnalyticsScreen = () => {
       .sort(([, a], [, b]) => b - a)
       .map(([id, amount]) => {
         const cat = getCategoryById(id);
-        return { id, name: cat.name.split(' ')[0], amount, color: cat.color, pct: totalSpend > 0 ? (amount / totalSpend) * 100 : 0 };
+        return {
+          id,
+          name: cat.name.split(' ')[0],
+          amount,
+          color: cat.color,
+          pct: totalSpend > 0 ? (amount / totalSpend) * 100 : 0,
+        };
       });
   }, [filteredExpenses, totalSpend]);
-
-  const [pieData, setPieData] = useState([]);
-  const [barData, setBarData] = useState({ labels: [], datasets: [{ data: [] }] });
 
   useEffect(() => {
     const newPieData = categoryTotals.slice(0, 6).map((c) => ({
       name: c.name,
-      population: c.amount,
+      population: c.amount || 0.01, // avoid zero values in PieChart
       color: c.color,
       legendFontColor: colors.textSecondary,
       legendFontSize: 12,
@@ -81,13 +89,15 @@ const AnalyticsScreen = () => {
       const d = subDays(new Date(), 6 - i);
       const key = format(d, 'yyyy-MM-dd');
       const label = format(d, 'EEE');
-      const dayExpenses = filteredExpenses.filter((e) => e.date.startsWith(key));
+      const dayExpenses = filteredExpenses.filter((e) =>
+        e.date && e.date.startsWith(key)
+      );
       return { label, total: sumExpenses(dayExpenses) };
     });
 
     const newBarData = {
       labels: days.map((d) => d.label),
-      datasets: [{ data: days.map((d) => d.total || 0) }],
+      datasets: [{ data: days.map((d) => Math.max(d.total, 0)) }],
     };
 
     setPieData(newPieData);
@@ -105,14 +115,22 @@ const AnalyticsScreen = () => {
     propsForDots: { r: '4', strokeWidth: '2', stroke: colors.primary },
   };
 
+  const hasData = filteredExpenses.length > 0;
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Header */}
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>Analytics</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              Spending breakdown
+            </Text>
           </View>
 
           {/* Range Tabs */}
@@ -125,7 +143,6 @@ const AnalyticsScreen = () => {
                   styles.rangeTab,
                   {
                     backgroundColor: range === r.id ? colors.primary : colors.surfaceSecondary,
-                    flex: 1,
                   },
                 ]}
               >
@@ -150,98 +167,119 @@ const AnalyticsScreen = () => {
               {formatCurrency(totalSpend, settings.currency)}
             </Text>
             <Text style={[styles.totalCount, { color: colors.textSecondary }]}>
-              {filteredExpenses.length} transactions
+              {filteredExpenses.length} transaction{filteredExpenses.length !== 1 ? 's' : ''}
             </Text>
           </Card>
 
-          {/* Bar Chart */}
-          {filteredExpenses.length > 0 && (
-            <Card style={styles.chartCard} elevation="sm">
-              <Text style={[styles.chartTitle, { color: colors.text }]}>Daily Spending (7 Days)</Text>
-              <BarChart
-                key={`bar-${range}-${barData.datasets[0]?.data.join('-')}`}
-                data={barData}
-                width={CHART_WIDTH}
-                height={180}
-                chartConfig={chartConfig}
-                style={styles.chart}
-                fromZero
-                showValuesOnTopOfBars={false}
-                withInnerLines={false}
-              />
-            </Card>
-          )}
-
-          {/* Pie Chart */}
-          {pieData.length > 0 && (
-            <Card style={styles.chartCard} elevation="sm">
-              <Text style={[styles.chartTitle, { color: colors.text }]}>Spending by Category</Text>
-              <PieChart
-                key={`pie-${range}-${pieData.map((p) => p.population).join('-')}`}
-                data={pieData}
-                width={CHART_WIDTH}
-                height={200}
-                chartConfig={chartConfig}
-                accessor="population"
-                backgroundColor="transparent"
-                paddingLeft="8"
-                style={styles.chart}
-                hasLegend={false}
-              />
-              {/* Custom Legend */}
-              <View style={styles.legend}>
-                {categoryTotals.slice(0, 6).map((cat) => (
-                  <View key={cat.id} style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: cat.color }]} />
-                    <Text style={[styles.legendName, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {cat.name}
-                    </Text>
-                    <Text style={[styles.legendPct, { color: colors.text }]}>
-                      {cat.pct.toFixed(1)}%
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </Card>
-          )}
-
-          {/* Category Breakdown List */}
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Category Breakdown</Text>
-          {categoryTotals.map((cat, idx) => (
-            <Card key={cat.id} style={styles.catRow} elevation="sm">
-              <View
-                style={[
-                  styles.catIconWrap,
-                  { backgroundColor: getCategoryById(cat.id).lightColor },
-                ]}
-              >
-                <MaterialIcons
-                  name={getCategoryById(cat.id).icon}
-                  size={20}
-                  color={cat.color}
+          {!hasData ? (
+            <EmptyState
+              icon="insights"
+              title="No data yet"
+              subtitle="Add some expenses to see your analytics"
+            />
+          ) : (
+            <>
+              {/* Bar Chart */}
+              <Card style={styles.chartCard} elevation="sm">
+                <Text style={[styles.chartTitle, { color: colors.text }]}>
+                  Daily Spending (7 Days)
+                </Text>
+                <BarChart
+                  key={`bar-${range}-${barData.datasets[0]?.data.join('-')}`}
+                  data={barData}
+                  width={CHART_WIDTH}
+                  height={180}
+                  chartConfig={chartConfig}
+                  style={styles.chart}
+                  fromZero
+                  showValuesOnTopOfBars={false}
+                  withInnerLines={false}
                 />
-              </View>
-              <View style={styles.catInfo}>
-                <Text style={[styles.catName, { color: colors.text }]}>{cat.name}</Text>
-                <View style={[styles.catBar, { backgroundColor: colors.surfaceSecondary }]}>
-                  <View
-                    style={[
-                      styles.catBarFill,
-                      { backgroundColor: cat.color, width: `${Math.min(cat.pct, 100)}%` },
-                    ]}
+              </Card>
+
+              {/* Pie Chart */}
+              {pieData.length > 0 && (
+                <Card style={styles.chartCard} elevation="sm">
+                  <Text style={[styles.chartTitle, { color: colors.text }]}>
+                    Spending by Category
+                  </Text>
+                  <PieChart
+                    key={`pie-${range}-${pieData.map((p) => p.population).join('-')}`}
+                    data={pieData}
+                    width={CHART_WIDTH}
+                    height={200}
+                    chartConfig={chartConfig}
+                    accessor="population"
+                    backgroundColor="transparent"
+                    paddingLeft="8"
+                    style={styles.chart}
+                    hasLegend={false}
                   />
-                </View>
-              </View>
-              <View style={styles.catAmountWrap}>
-                <Text style={[styles.catAmount, { color: colors.text }]}>
-                  {formatCurrency(cat.amount, settings.currency)}
-                </Text>
-                <Text style={[styles.catPct, { color: colors.textSecondary }]}>
-                  {cat.pct.toFixed(1)}%
-                </Text>
-              </View>
-            </Card>
-          ))}
+                  {/* Custom Legend */}
+                  <View style={styles.legend}>
+                    {categoryTotals.slice(0, 6).map((cat) => (
+                      <View key={cat.id} style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: cat.color }]} />
+                        <Text
+                          style={[styles.legendName, { color: colors.textSecondary }]}
+                          numberOfLines={1}
+                        >
+                          {cat.name}
+                        </Text>
+                        <Text style={[styles.legendPct, { color: colors.text }]}>
+                          {cat.pct.toFixed(1)}%
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </Card>
+              )}
+
+              {/* Category Breakdown List */}
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Category Breakdown
+              </Text>
+              {categoryTotals.map((cat) => {
+                const catInfo = getCategoryById(cat.id);
+                return (
+                  <Card key={cat.id} style={styles.catRow} elevation="sm">
+                    <View
+                      style={[
+                        styles.catIconWrap,
+                        { backgroundColor: isDark ? catInfo.darkColor : catInfo.lightColor },
+                      ]}
+                    >
+                      <MaterialIcons name={catInfo.icon} size={20} color={cat.color} />
+                    </View>
+                    <View style={styles.catInfo}>
+                      <Text style={[styles.catName, { color: colors.text }]}>{cat.name}</Text>
+                      <View
+                        style={[styles.catBar, { backgroundColor: colors.surfaceSecondary }]}
+                      >
+                        <View
+                          style={[
+                            styles.catBarFill,
+                            {
+                              backgroundColor: cat.color,
+                              width: `${Math.min(cat.pct, 100)}%`,
+                            },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                    <View style={styles.catAmountWrap}>
+                      <Text style={[styles.catAmount, { color: colors.text }]}>
+                        {formatCurrency(cat.amount, settings.currency)}
+                      </Text>
+                      <Text style={[styles.catPct, { color: colors.textSecondary }]}>
+                        {cat.pct.toFixed(1)}%
+                      </Text>
+                    </View>
+                  </Card>
+                );
+              })}
+            </>
+          )}
 
           <View style={{ height: Layout.tabBarHeight + Spacing.xl }} />
         </ScrollView>
@@ -254,14 +292,16 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   scroll: { padding: Layout.screenPadding },
-  header: { marginBottom: Spacing.base },
+  header: { marginBottom: Spacing.md },
   title: { fontSize: FontSize['2xl'], fontWeight: FontWeight.bold },
+  subtitle: { fontSize: FontSize.sm, marginTop: 2 },
   rangeRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
     marginBottom: Spacing.base,
   },
   rangeTab: {
+    flex: 1,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.md,
     alignItems: 'center',
@@ -273,7 +313,11 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xl,
   },
   totalLabel: { fontSize: FontSize.sm, marginBottom: Spacing.xs, letterSpacing: 0.3 },
-  totalAmount: { fontSize: FontSize['4xl'], fontWeight: FontWeight.extraBold, letterSpacing: -1 },
+  totalAmount: {
+    fontSize: FontSize['4xl'],
+    fontWeight: FontWeight.extraBold,
+    letterSpacing: -1,
+  },
   totalCount: { fontSize: FontSize.sm, marginTop: Spacing.xs },
   chartCard: { marginBottom: Spacing.base, overflow: 'hidden' },
   chartTitle: {

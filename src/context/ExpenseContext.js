@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import {
   getExpenses,
   getSettings,
@@ -8,9 +7,10 @@ import {
   addExpense as storageAdd,
   deleteExpense as storageDelete,
   updateExpense as storageUpdate,
-  updateSetting
+  updateSetting,
 } from '../services/StorageService';
 import { filterExpensesByDateRange, getDateRanges, sumExpenses } from '../utils/formatters';
+import { generateId } from '../utils/uuid';
 
 const ExpenseContext = createContext(null);
 
@@ -21,7 +21,7 @@ const DEFAULT_SETTINGS = {
   hideWallet: false,
   currency: 'PHP',
   notificationsEnabled: false,
-  darkMode: false,
+  darkMode: true,
   mascotType: 'squirrel',
   avatarImage: null,
   avatarVoice: false,
@@ -36,7 +36,6 @@ export const ExpenseProvider = ({ children }) => {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
 
-  // ─── Init ─────────────────────────────────────────────────────────
   useEffect(() => {
     initializeData();
   }, []);
@@ -48,14 +47,8 @@ export const ExpenseProvider = ({ children }) => {
         getExpenses(),
         getSettings(),
       ]);
-
-      // Load stored expenses (empty if no data)
-      setExpenses(storedExpenses);
-
-      setSettings({
-        ...DEFAULT_SETTINGS,
-        ...storedSettings,
-      });
+      setExpenses(storedExpenses || []);
+      setSettings({ ...DEFAULT_SETTINGS, ...storedSettings });
     } catch (e) {
       console.error('ExpenseContext init error:', e);
     } finally {
@@ -63,16 +56,16 @@ export const ExpenseProvider = ({ children }) => {
     }
   };
 
-  // ─── Expense Operations ─────────────────────────────────────────────
+  // ─── Expense Operations ────────────────────────────────────────────
   const addExpense = async (expenseData) => {
     try {
       const newExpense = {
-        id: uuidv4(),
+        id: generateId(),
         ...expenseData,
         createdAt: new Date().toISOString(),
       };
       const updated = await storageAdd(newExpense);
-      setExpenses(updated);
+      if (updated) setExpenses(updated);
       return newExpense;
     } catch (e) {
       console.error('addExpense error:', e);
@@ -83,7 +76,7 @@ export const ExpenseProvider = ({ children }) => {
   const updateExpense = async (id, expenseData) => {
     try {
       const updated = await storageUpdate(id, expenseData);
-      setExpenses(updated);
+      if (updated) setExpenses(updated);
     } catch (e) {
       console.error('updateExpense error:', e);
       throw e;
@@ -93,16 +86,14 @@ export const ExpenseProvider = ({ children }) => {
   const deleteExpense = async (id) => {
     try {
       const updated = await storageDelete(id);
-      setExpenses(updated);
+      if (updated) setExpenses(updated);
     } catch (e) {
       console.error('deleteExpense error:', e);
       throw e;
     }
   };
 
-  const getExpenseById = (id) => {
-    return expenses.find((expense) => expense.id === id) || null;
-  };
+  const getExpenseById = (id) => expenses.find((e) => e.id === id) || null;
 
   const restoreExpense = async (id) => {
     try {
@@ -121,29 +112,27 @@ export const ExpenseProvider = ({ children }) => {
   // ─── Computed Values ───────────────────────────────────────────────
   const ranges = getDateRanges();
 
-  const todayExpenses = expenses.filter((e) =>
-    filterExpensesByDateRange([e], ranges.today.start, ranges.today.end).length > 0
+  const todayExpenses = expenses.filter(
+    (e) => filterExpensesByDateRange([e], ranges.today.start, ranges.today.end).length > 0
   );
-
-  const weekExpenses = expenses.filter((e) =>
-    filterExpensesByDateRange([e], ranges.thisWeek.start, ranges.thisWeek.end).length > 0
+  const weekExpenses = expenses.filter(
+    (e) => filterExpensesByDateRange([e], ranges.thisWeek.start, ranges.thisWeek.end).length > 0
   );
-
-  const monthExpenses = expenses.filter((e) =>
-    filterExpensesByDateRange([e], ranges.thisMonth.start, ranges.thisMonth.end).length > 0
+  const monthExpenses = expenses.filter(
+    (e) => filterExpensesByDateRange([e], ranges.thisMonth.start, ranges.thisMonth.end).length > 0
   );
 
   const todayTotal = sumExpenses(todayExpenses);
   const weekTotal = sumExpenses(weekExpenses);
   const monthTotal = sumExpenses(monthExpenses);
+  const totalExpenses = sumExpenses(expenses);
 
   const monthlyBudget = settings.monthlyBudget || 15000;
-  const budgetUsed = (monthTotal / monthlyBudget) * 100;
+  const budgetUsed = monthlyBudget > 0 ? (monthTotal / monthlyBudget) * 100 : 0;
   const budgetRemaining = Math.max(0, monthlyBudget - monthTotal);
-  const totalExpenses = sumExpenses(expenses);
   const currentBalance = (settings.walletBalance ?? 0) - totalExpenses;
 
-  // ─── Settings Operations ─────────────────────────────────────────────
+  // ─── Settings Operations ──────────────────────────────────────────
   const updateSettings = async (key, value) => {
     try {
       await updateSetting(key, value);
@@ -165,33 +154,33 @@ export const ExpenseProvider = ({ children }) => {
 
   const addShoppingItem = async (item) => {
     const nextList = [
-      { id: uuidv4(), name: item, addedAt: new Date().toISOString() },
+      { id: generateId(), name: item, addedAt: new Date().toISOString() },
       ...(settings.shoppingList || []),
     ];
     await updateSettings('shoppingList', nextList);
   };
 
   const removeShoppingItem = async (itemId) => {
-    const nextList = (settings.shoppingList || []).filter((item) => item.id !== itemId);
+    const nextList = (settings.shoppingList || []).filter((i) => i.id !== itemId);
     await updateSettings('shoppingList', nextList);
   };
 
   const addPlannedPayment = async (payment) => {
     const nextList = [
-      { id: uuidv4(), ...payment, createdAt: new Date().toISOString() },
+      { id: generateId(), ...payment, createdAt: new Date().toISOString() },
       ...(settings.plannedPayments || []),
     ];
     await updateSettings('plannedPayments', nextList);
   };
 
   const removePlannedPayment = async (paymentId) => {
-    const nextList = (settings.plannedPayments || []).filter((item) => item.id !== paymentId);
+    const nextList = (settings.plannedPayments || []).filter((i) => i.id !== paymentId);
     await updateSettings('plannedPayments', nextList);
   };
 
   const submitFeedback = async (feedback) => {
     const nextList = [
-      { id: uuidv4(), message: feedback, submittedAt: new Date().toISOString() },
+      { id: generateId(), message: feedback, submittedAt: new Date().toISOString() },
       ...(settings.feedbackEntries || []),
     ];
     await updateSettings('feedbackEntries', nextList);
@@ -207,41 +196,29 @@ export const ExpenseProvider = ({ children }) => {
     }
   };
 
-  // ─── Search ────────────────────────────────────────────────────────
   const searchExpenses = (query) => {
     if (!query.trim()) return expenses;
-    const lowerQuery = query.toLowerCase();
+    const q = query.toLowerCase();
     return expenses.filter(
-      (e) =>
-        e.note?.toLowerCase().includes(lowerQuery) ||
-        e.category.toLowerCase().includes(lowerQuery)
+      (e) => e.note?.toLowerCase().includes(q) || e.category.toLowerCase().includes(q)
     );
   };
 
   const value = {
-    // Data
     expenses,
     settings,
     loading,
-
-    // Filtered lists
     todayExpenses,
     weekExpenses,
     monthExpenses,
-
-    // Totals
     todayTotal,
     weekTotal,
     monthTotal,
     totalExpenses,
     currentBalance,
-
-    // Budget
     monthlyBudget,
     budgetUsed,
     budgetRemaining,
-
-    // Methods
     addExpense,
     updateExpense,
     deleteExpense,
@@ -259,17 +236,11 @@ export const ExpenseProvider = ({ children }) => {
     searchExpenses,
   };
 
-  return (
-    <ExpenseContext.Provider value={value}>
-      {children}
-    </ExpenseContext.Provider>
-  );
+  return <ExpenseContext.Provider value={value}>{children}</ExpenseContext.Provider>;
 };
 
 export const useExpenses = () => {
-  const context = useContext(ExpenseContext);
-  if (!context) {
-    throw new Error('useExpenses must be used within ExpenseProvider');
-  }
-  return context;
+  const ctx = useContext(ExpenseContext);
+  if (!ctx) throw new Error('useExpenses must be used within ExpenseProvider');
+  return ctx;
 };

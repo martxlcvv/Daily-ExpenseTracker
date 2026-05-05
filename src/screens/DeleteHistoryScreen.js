@@ -1,21 +1,22 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Animated,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useExpenses } from '../context/ExpenseContext';
 import { useTheme } from '../context/ThemeContext';
-import { clearDeleteHistory, getDeleteHistory, restoreFromHistory, bulkDeleteExpenses } from '../services/StorageService';
+import { bulkDeleteExpenses, clearDeleteHistory, getDeleteHistory } from '../services/StorageService';
 import { BorderRadius, Layout, Shadow, Spacing } from '../theme/spacing';
 import { FontSize, FontWeight } from '../theme/typography';
 import { getCategoryById } from '../utils/categories';
@@ -23,6 +24,7 @@ import { formatDateFull, formatTime } from '../utils/formatters';
 
 const DeleteHistoryScreen = ({ navigation }) => {
   const { colors, isDark } = useTheme();
+  const { restoreExpense } = useExpenses();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -88,9 +90,13 @@ const DeleteHistoryScreen = ({ navigation }) => {
         {
           text: 'Restore',
           onPress: async () => {
-            await restoreFromHistory(expense.id);
-            loadHistory();
-            Alert.alert('Success', 'Expense restored successfully!');
+            const restored = await restoreExpense(expense.id);
+            if (restored) {
+              await loadHistory();
+              Alert.alert('Success', 'Expense restored successfully!');
+            } else {
+              Alert.alert('Error', 'Unable to restore this expense.');
+            }
           },
         },
       ]

@@ -1,41 +1,32 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { BorderRadius, Shadow, Spacing } from '../../theme/spacing';
 import { FontSize, FontWeight } from '../../theme/typography';
 import { formatCurrency } from '../../utils/formatters';
 
 const BalanceCard = ({
-  monthTotal,
-  budgetRemaining,
-  monthlyBudget,
-  budgetUsed,
+  walletBalance,
+  hideBalance,
+  onToggleHide,
+  totalExpenses,
   currency = 'PHP',
 }) => {
   const { colors } = useTheme();
-  const progressAnim = useRef(new Animated.Value(0)).current;
   const countAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(progressAnim, {
-        toValue: Math.min(budgetUsed / 100, 1),
-        duration: 1000,
-        useNativeDriver: false,
-        delay: 300,
-      }),
-      Animated.timing(countAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-        delay: 100,
-      }),
-    ]).start();
-  }, [budgetUsed]);
+    Animated.timing(countAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+      delay: 100,
+    }).start();
+  }, [walletBalance]);
 
-  const barColor = budgetUsed > 90 ? colors.danger : budgetUsed > 70 ? colors.warning : colors.accent;
+  const displayBalance = hideBalance ? '••••••' : formatCurrency(walletBalance ?? 0, currency);
 
   return (
     <LinearGradient
@@ -48,45 +39,34 @@ const BalanceCard = ({
       <View style={styles.decorCircle1} />
       <View style={styles.decorCircle2} />
 
-      {/* Header */}
+      {/* Header with toggle */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerLabel}>Monthly Spending</Text>
-          <Text style={styles.amount}>{formatCurrency(monthTotal, currency)}</Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.headerLabel}>Wallet Balance</Text>
+          <Text style={styles.subtitle}>Account overview</Text>
         </View>
-        <View style={styles.iconWrap}>
-          <MaterialIcons name="account-balance-wallet" size={28} color="rgba(255,255,255,0.9)" />
-        </View>
+        <TouchableOpacity
+          onPress={onToggleHide}
+          style={styles.toggleButton}
+          activeOpacity={0.7}
+        >
+          <MaterialIcons
+            name={hideBalance ? 'visibility-off' : 'visibility'}
+            size={22}
+            color="rgba(255,255,255,0.9)"
+          />
+        </TouchableOpacity>
       </View>
 
-      {/* Budget Progress */}
-      <View style={styles.budgetSection}>
-        <View style={styles.budgetRow}>
-          <Text style={styles.budgetLabel}>Budget Used</Text>
-          <Text style={styles.budgetPct}>{Math.round(budgetUsed)}%</Text>
-        </View>
-        <View style={styles.progressBg}>
-          <Animated.View
-            style={[
-              styles.progressFill,
-              {
-                backgroundColor: budgetUsed > 90 ? '#FF5252' : budgetUsed > 70 ? '#FFB347' : '#43D9AD',
-                width: progressAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['0%', '100%'],
-                }),
-              },
-            ]}
-          />
-        </View>
-        <View style={styles.budgetFooter}>
-          <Text style={styles.budgetFooterText}>
-            {formatCurrency(budgetRemaining, currency)} remaining
-          </Text>
-          <Text style={styles.budgetFooterText}>
-            of {formatCurrency(monthlyBudget, currency)}
-          </Text>
-        </View>
+      {/* Balance Display */}
+      <Animated.View style={[styles.balanceSection, { opacity: countAnim }]}>
+        <Text style={styles.amount}>{displayBalance}</Text>
+      </Animated.View>
+
+      {/* Total Spent Info */}
+      <View style={styles.infoSection}>
+        <Text style={styles.infoLabel}>Total spent</Text>
+        <Text style={styles.infoAmount}>{formatCurrency(totalExpenses, currency)}</Text>
       </View>
     </LinearGradient>
   );
@@ -123,62 +103,56 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: Spacing.xl,
   },
+  titleContainer: {
+    flex: 1,
+  },
   headerLabel: {
-    fontSize: FontSize.sm,
-    color: 'rgba(255,255,255,0.75)',
-    fontWeight: FontWeight.medium,
-    marginBottom: Spacing.xs,
+    fontSize: FontSize.lg,
+    color: '#FFFFFF',
+    fontWeight: FontWeight.bold,
     letterSpacing: 0.3,
   },
-  amount: {
-    fontSize: FontSize['4xl'],
-    fontWeight: FontWeight.extraBold,
-    color: '#FFFFFF',
-    letterSpacing: -1,
+  subtitle: {
+    fontSize: FontSize.sm,
+    color: 'rgba(255,255,255,0.65)',
+    fontWeight: FontWeight.medium,
+    marginTop: Spacing.xs,
   },
-  iconWrap: {
-    width: 52,
-    height: 52,
+  toggleButton: {
+    width: 44,
+    height: 44,
     borderRadius: BorderRadius.lg,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: Spacing.sm,
   },
-  budgetSection: {
-    gap: Spacing.sm,
+  balanceSection: {
+    marginBottom: Spacing.xl,
   },
-  budgetRow: {
+  amount: {
+    fontSize: FontSize['5xl'],
+    fontWeight: FontWeight.extraBold,
+    color: '#FFFFFF',
+    letterSpacing: -1,
+  },
+  infoSection: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingTop: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.15)',
   },
-  budgetLabel: {
+  infoLabel: {
     fontSize: FontSize.sm,
-    color: 'rgba(255,255,255,0.75)',
+    color: 'rgba(255,255,255,0.65)',
     fontWeight: FontWeight.medium,
   },
-  budgetPct: {
-    fontSize: FontSize.sm,
+  infoAmount: {
+    fontSize: FontSize.lg,
     color: '#FFFFFF',
     fontWeight: FontWeight.bold,
-  },
-  progressBg: {
-    height: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: BorderRadius.full,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: BorderRadius.full,
-  },
-  budgetFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  budgetFooterText: {
-    fontSize: FontSize.xs,
-    color: 'rgba(255,255,255,0.65)',
   },
 });
 

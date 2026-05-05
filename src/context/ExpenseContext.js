@@ -1,7 +1,15 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { getExpenses, getSettings, saveExpenses, addExpense as storageAdd, deleteExpense as storageDelete, updateExpense as storageUpdate, updateSetting } from '../services/StorageService';
-import { DUMMY_EXPENSES } from '../utils/dummyData';
+import {
+  getExpenses,
+  getSettings,
+  restoreFromHistory,
+  saveExpenses,
+  addExpense as storageAdd,
+  deleteExpense as storageDelete,
+  updateExpense as storageUpdate,
+  updateSetting
+} from '../services/StorageService';
 import { filterExpensesByDateRange, getDateRanges, sumExpenses } from '../utils/formatters';
 
 const ExpenseContext = createContext(null);
@@ -9,12 +17,18 @@ const ExpenseContext = createContext(null);
 const DEFAULT_SETTINGS = {
   firstName: '',
   monthlyBudget: 15000,
+  walletBalance: 15000,
+  hideWallet: false,
   currency: 'PHP',
-  darkMode: false,
   notificationsEnabled: false,
+  darkMode: false,
   mascotType: 'squirrel',
   avatarImage: null,
   avatarVoice: false,
+  shoppingList: [],
+  plannedPayments: [],
+  feedbackEntries: [],
+  donationNumber: '09171234567',
 };
 
 export const ExpenseProvider = ({ children }) => {
@@ -35,13 +49,8 @@ export const ExpenseProvider = ({ children }) => {
         getSettings(),
       ]);
 
-      // Use dummy data if storage is empty
-      if (storedExpenses.length === 0) {
-        await saveExpenses(DUMMY_EXPENSES);
-        setExpenses(DUMMY_EXPENSES);
-      } else {
-        setExpenses(storedExpenses);
-      }
+      // Load stored expenses (empty if no data)
+      setExpenses(storedExpenses);
 
       setSettings({
         ...DEFAULT_SETTINGS,
@@ -91,6 +100,24 @@ export const ExpenseProvider = ({ children }) => {
     }
   };
 
+  const getExpenseById = (id) => {
+    return expenses.find((expense) => expense.id === id) || null;
+  };
+
+  const restoreExpense = async (id) => {
+    try {
+      const restored = await restoreFromHistory(id);
+      if (restored) {
+        const updated = await getExpenses();
+        setExpenses(updated);
+      }
+      return restored;
+    } catch (e) {
+      console.error('restoreExpense error:', e);
+      return false;
+    }
+  };
+
   // ─── Computed Values ───────────────────────────────────────────────
   const ranges = getDateRanges();
 
@@ -113,6 +140,8 @@ export const ExpenseProvider = ({ children }) => {
   const monthlyBudget = settings.monthlyBudget || 15000;
   const budgetUsed = (monthTotal / monthlyBudget) * 100;
   const budgetRemaining = Math.max(0, monthlyBudget - monthTotal);
+  const totalExpenses = sumExpenses(expenses);
+  const currentBalance = (settings.walletBalance ?? 0) - totalExpenses;
 
   // ─── Settings Operations ─────────────────────────────────────────────
   const updateSettings = async (key, value) => {
@@ -123,6 +152,49 @@ export const ExpenseProvider = ({ children }) => {
       console.error('updateSettings error:', e);
       throw e;
     }
+  };
+
+  const setWalletBalance = async (amount) => {
+    const value = Number(amount) || 0;
+    await updateSettings('walletBalance', value);
+  };
+
+  const toggleHideWallet = async () => {
+    await updateSettings('hideWallet', !settings.hideWallet);
+  };
+
+  const addShoppingItem = async (item) => {
+    const nextList = [
+      { id: uuidv4(), name: item, addedAt: new Date().toISOString() },
+      ...(settings.shoppingList || []),
+    ];
+    await updateSettings('shoppingList', nextList);
+  };
+
+  const removeShoppingItem = async (itemId) => {
+    const nextList = (settings.shoppingList || []).filter((item) => item.id !== itemId);
+    await updateSettings('shoppingList', nextList);
+  };
+
+  const addPlannedPayment = async (payment) => {
+    const nextList = [
+      { id: uuidv4(), ...payment, createdAt: new Date().toISOString() },
+      ...(settings.plannedPayments || []),
+    ];
+    await updateSettings('plannedPayments', nextList);
+  };
+
+  const removePlannedPayment = async (paymentId) => {
+    const nextList = (settings.plannedPayments || []).filter((item) => item.id !== paymentId);
+    await updateSettings('plannedPayments', nextList);
+  };
+
+  const submitFeedback = async (feedback) => {
+    const nextList = [
+      { id: uuidv4(), message: feedback, submittedAt: new Date().toISOString() },
+      ...(settings.feedbackEntries || []),
+    ];
+    await updateSettings('feedbackEntries', nextList);
   };
 
   const clearAllExpenses = async () => {
@@ -161,6 +233,8 @@ export const ExpenseProvider = ({ children }) => {
     todayTotal,
     weekTotal,
     monthTotal,
+    totalExpenses,
+    currentBalance,
 
     // Budget
     monthlyBudget,
@@ -171,7 +245,16 @@ export const ExpenseProvider = ({ children }) => {
     addExpense,
     updateExpense,
     deleteExpense,
+    restoreExpense,
+    getExpenseById,
     updateSettings,
+    setWalletBalance,
+    toggleHideWallet,
+    addShoppingItem,
+    removeShoppingItem,
+    addPlannedPayment,
+    removePlannedPayment,
+    submitFeedback,
     clearAllExpenses,
     searchExpenses,
   };

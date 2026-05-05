@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -69,10 +70,20 @@ const SettingsScreen = ({ navigation }) => {
   const [showBudgetInput, setShowBudgetInput] = useState(false);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [showMascotPicker, setShowMascotPicker] = useState(false);
+  const [showWalletInput, setShowWalletInput] = useState(false);
+  const [walletAmount, setWalletAmount] = useState(String(settings.walletBalance || 15000));
+  const [hideWallet, setHideWallet] = useState(settings.hideWallet || false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [rating, setRating] = useState(0);
   const [firstName, setFirstName] = useState(settings.firstName || '');
   const [selectedMascot, setSelectedMascot] = useState(settings.mascotType || 'squirrel');
   const [avatarImage, setAvatarImage] = useState(settings.avatarImage || null);
   const [avatarVoice, setAvatarVoice] = useState(settings.avatarVoice || false);
+
+  useEffect(() => {
+    setWalletAmount(String(settings.walletBalance ?? 15000));
+    setHideWallet(settings.hideWallet ?? false);
+  }, [settings.walletBalance, settings.hideWallet]);
 
   const handleNotifToggle = async (val) => {
     if (val) {
@@ -146,6 +157,37 @@ const SettingsScreen = ({ navigation }) => {
   const handleCurrencySelect = async (code) => {
     await updateSettings('currency', code);
     setShowCurrencyPicker(false);
+  };
+
+  const handleWalletSave = async () => {
+    const value = Number(walletAmount);
+    if (!value || value < 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid wallet balance.');
+      return;
+    }
+    await updateSettings('walletBalance', value);
+    setShowWalletInput(false);
+    Alert.alert('Saved', 'Wallet balance updated.');
+  };
+
+  const handleHideWalletToggle = async (val) => {
+    setHideWallet(val);
+    await updateSettings('hideWallet', val);
+  };
+
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackText.trim()) {
+      Alert.alert('Feedback', 'Please write your message first.');
+      return;
+    }
+    await updateSettings('feedbackEntries', [
+      { id: `${Date.now()}`, message: feedbackText.trim(), rating, submittedAt: new Date().toISOString() },
+      ...(settings.feedbackEntries || []),
+    ]);
+    setFeedbackText('');
+    setRating(0);
+    Alert.alert('Thank you!', 'Your feedback has been recorded.');
   };
 
   const handleClearData = () => {
@@ -255,6 +297,18 @@ const SettingsScreen = ({ navigation }) => {
             />
           </Card>
 
+          <Text style={[styles.sectionHeader, { color: colors.textSecondary }]}>APP THEME</Text>
+          <Card style={styles.sectionCard} elevation="sm">
+            <SettingRow
+              icon="dark-mode"
+              label="Dark Mode"
+              subtitle={isDark ? 'Enabled' : 'Disabled'}
+              color="#7C75FF"
+              right={<Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: '#7C75FF' }} />}
+              style={{ borderBottomWidth: 0 }}
+            />
+          </Card>
+
           {/* Profile Card */}
           <LinearGradient
             colors={['#6C63FF', '#8B85FF']}
@@ -348,6 +402,120 @@ const SettingsScreen = ({ navigation }) => {
                 ))}
               </View>
             )}
+          </Card>
+
+          {/* Wallet */}
+          <Text style={[styles.sectionHeader, { color: colors.textSecondary }]}>WALLET</Text>
+          <Card style={styles.sectionCard} elevation="sm">
+            <SettingRow
+              icon="account-balance-wallet"
+              label="Wallet Balance"
+              subtitle={formatCurrency(settings.walletBalance || 0, settings.currency)}
+              color="#43D9AD"
+              onPress={() => setShowWalletInput(!showWalletInput)}
+              right={
+                <MaterialIcons
+                  name={showWalletInput ? 'expand-less' : 'expand-more'}
+                  size={20}
+                  color={colors.textTertiary}
+                />
+              }
+            />
+            {showWalletInput && (
+              <View style={[styles.budgetInput, { borderTopColor: colors.separator }]}>
+                <Input
+                  value={walletAmount}
+                  onChangeText={setWalletAmount}
+                  placeholder="Enter wallet amount"
+                  keyboardType="decimal-pad"
+                  icon="wallet"
+                  prefix={settings.currency === 'PHP' ? '₱' : '$'}
+                  style={{ marginBottom: Spacing.md }}
+                />
+                <Button title="Save Wallet" onPress={handleWalletSave} size="sm" />
+              </View>
+            )}
+            <SettingRow
+              icon="visibility"
+              label="Hide Wallet Balance"
+              subtitle={hideWallet ? 'Hidden on dashboard' : 'Visible on dashboard'}
+              color="#7C75FF"
+              right={
+                <Switch
+                  value={hideWallet}
+                  onValueChange={handleHideWalletToggle}
+                  trackColor={{ true: colors.primary }}
+                />
+              }
+              style={{ borderBottomWidth: 0 }}
+            />
+          </Card>
+
+          {/* Shopping List */}
+          <Text style={[styles.sectionHeader, { color: colors.textSecondary }]}>SHOPPING LIST</Text>
+          <Card style={styles.sectionCard} elevation="sm">
+            <SettingRow
+              icon="shopping-cart"
+              label="Shopping List"
+              subtitle={
+                settings.shoppingList?.length
+                  ? `${settings.shoppingList.length} item(s) saved`
+                  : 'No shopping items yet'
+              }
+              onPress={() => navigation.navigate('ShoppingList')}
+              right={<MaterialIcons name="chevron-right" size={20} color={colors.textTertiary} />}
+            />
+          </Card>
+
+          {/* Planned Payments */}
+          <Text style={[styles.sectionHeader, { color: colors.textSecondary }]}>PLANNED PAYMENTS</Text>
+          <Card style={styles.sectionCard} elevation="sm">
+            <SettingRow
+              icon="event-note"
+              label="Planned Payments"
+              subtitle={
+                settings.plannedPayments?.length
+                  ? `${settings.plannedPayments.length} payment(s) planned`
+                  : 'No planned payments yet'
+              }
+              onPress={() => navigation.navigate('PlannedPayments')}
+              right={<MaterialIcons name="chevron-right" size={20} color={colors.textTertiary} />}
+            />
+          </Card>
+
+          {/* Donate & Feedback */}
+          <Text style={[styles.sectionHeader, { color: colors.textSecondary }]}>SUPPORT & FEEDBACK</Text>
+          <Card style={styles.sectionCard} elevation="sm">
+            <Text style={[styles.donateTitle, { color: colors.text }]}>Donate via GCash</Text>
+            <Text style={[styles.donateSubtitle, { color: colors.textSecondary }]}>Send support with this number or scan the QR placeholder below.</Text>
+            <View style={[styles.qrCard, { backgroundColor: colors.surfaceSecondary }]}> 
+              <Text style={[styles.qrText, { color: colors.textSecondary }]}>GCash: {settings.donationNumber || '09171234567'}</Text>
+              <View style={[styles.qrPlaceholder, { borderColor: colors.border }]}> 
+                <Text style={[styles.qrLabel, { color: colors.textSecondary }]}>QR</Text>
+              </View>
+            </View>
+            <Text style={[styles.feedbackTitle, { color: colors.text }]}>Rate & share feedback</Text>
+            <View style={styles.ratingRow}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <TouchableOpacity key={value} onPress={() => setRating(value)}>
+                  <MaterialIcons
+                    name={value <= rating ? 'star' : 'star-border'}
+                    size={24}
+                    color={value <= rating ? colors.primary : colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Input
+              label="Message"
+              value={feedbackText}
+              onChangeText={setFeedbackText}
+              placeholder="How can we improve?"
+              multiline
+              numberOfLines={3}
+              style={{ marginBottom: Spacing.md }}
+            />
+            <Button title="Submit Feedback" onPress={handleSubmitFeedback} />
           </Card>
 
           {/* Budget */}
@@ -565,6 +733,79 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     fontWeight: FontWeight.medium,
     textAlign: 'center',
+  },
+  listHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+  },
+  addButton: {
+    width: 45,
+    height: 45,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  listItemText: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.medium,
+  },
+  listItemSub: {
+    fontSize: FontSize.xs,
+    marginTop: Spacing.xs,
+  },
+  emptyText: {
+    padding: Spacing.md,
+    fontSize: FontSize.sm,
+  },
+  donateTitle: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.bold,
+    marginBottom: Spacing.xs,
+  },
+  donateSubtitle: {
+    fontSize: FontSize.sm,
+    marginBottom: Spacing.md,
+  },
+  qrCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.lg,
+  },
+  qrText: {
+    fontSize: FontSize.sm,
+  },
+  qrPlaceholder: {
+    width: 70,
+    height: 70,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrLabel: {
+    fontSize: FontSize.sm,
+  },
+  feedbackTitle: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.bold,
+    marginBottom: Spacing.sm,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
   },
 });
 

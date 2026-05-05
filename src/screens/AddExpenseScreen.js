@@ -25,20 +25,32 @@ import { formatDateFull } from '../utils/formatters';
 import { ResponsiveSize } from '../utils/responsive';
 
 const AddExpenseScreen = ({ route, navigation }) => {
-  const { addExpense, updateExpense, getExpenseById } = useExpenses();
+  const { addExpense, updateExpense, deleteExpense, getExpenseById, settings } = useExpenses();
   const { colors, isDark } = useTheme();
 
   const expenseId = route?.params?.id;
+  const routeExpense = route?.params?.expense || (expenseId ? getExpenseById(expenseId) : null);
   const mode = route?.params?.mode || 'add';
-  const isEdit = mode === 'edit';
+  const isEdit = mode === 'edit' && !!routeExpense;
 
-  const [amount, setAmount] = useState(isEdit ? String(expense.amount) : '');
-  const [category, setCategory] = useState(isEdit ? expense.category : 'food');
-  const [note, setNote] = useState(isEdit ? expense.note : '');
-  const [date, setDate] = useState(isEdit ? new Date(expense.date) : new Date());
+  const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState('food');
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+  const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    if (isEdit && routeExpense) {
+      setAmount(String(routeExpense.amount));
+      setCategory(routeExpense.category || 'food');
+      setName(routeExpense.name || '');
+      setNote(routeExpense.note || '');
+      setDate(routeExpense.date ? new Date(routeExpense.date) : new Date());
+    }
+  }, [isEdit, routeExpense]);
 
   const slideAnim = useRef(new Animated.Value(50)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -69,11 +81,12 @@ const AddExpenseScreen = ({ route, navigation }) => {
       const expenseData = {
         amount: parseFloat(amount),
         category,
+        name: name.trim() || getCategoryName(category),
         note: note.trim(),
         date: date.toISOString(),
       };
-      if (isEdit) {
-        await updateExpense(expense.id, expenseData);
+      if (isEdit && routeExpense) {
+        await updateExpense(routeExpense.id, expenseData);
       } else {
         await addExpense(expenseData);
       }
@@ -87,6 +100,8 @@ const AddExpenseScreen = ({ route, navigation }) => {
   };
 
   const handleDelete = () => {
+    if (!routeExpense) return;
+
     Alert.alert(
       'Delete Expense',
       'Are you sure you want to delete this expense?',
@@ -96,7 +111,7 @@ const AddExpenseScreen = ({ route, navigation }) => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await deleteExpense(expense.id);
+            await deleteExpense(routeExpense.id);
             navigation.goBack();
           },
         },
@@ -105,6 +120,11 @@ const AddExpenseScreen = ({ route, navigation }) => {
   };
 
   const selectedCategory = CATEGORIES.find((c) => c.id === category);
+
+  const getCategoryName = (catId) => {
+    const cat = CATEGORIES.find((c) => c.id === catId);
+    return cat ? cat.name : 'Expense';
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -180,6 +200,15 @@ const AddExpenseScreen = ({ route, navigation }) => {
                   <Text style={[styles.errorMsg, { color: colors.danger }]}>{errors.amount}</Text>
                 )}
               </View>
+
+              {/* Name/Description Input */}
+              <Text style={[styles.sectionLabel, { color: colors.text }]}>Description</Text>
+              <Input
+                value={name}
+                onChangeText={setName}
+                placeholder="What did you spend on? (e.g., Lunch at cafe)"
+                icon="text-fields"
+              />
 
               {/* Category Selector */}
               <Text style={[styles.sectionLabel, { color: colors.text }]}>Category</Text>

@@ -2,13 +2,13 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { format, subDays } from 'date-fns';
 import { useMemo, useState } from 'react';
 import {
-    Dimensions,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { BarChart, PieChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,10 +19,10 @@ import { BorderRadius, Layout, Spacing } from '../theme/spacing';
 import { FontSize, FontWeight } from '../theme/typography';
 import { getCategoryById } from '../utils/categories';
 import {
-    filterExpensesByDateRange,
-    formatCurrency,
-    getDateRanges,
-    sumExpenses,
+  filterExpensesByDateRange,
+  formatCurrency,
+  getDateRanges,
+  sumExpenses,
 } from '../utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -65,17 +65,18 @@ const AnalyticsScreen = () => {
       });
   }, [filteredExpenses, totalSpend]);
 
-  // Pie chart data
-  const pieData = categoryTotals.slice(0, 6).map((c) => ({
-    name: c.name,
-    population: c.amount,
-    color: c.color,
-    legendFontColor: colors.textSecondary,
-    legendFontSize: 12,
-  }));
+  const [pieData, setPieData] = useState([]);
+  const [barData, setBarData] = useState({ labels: [], datasets: [{ data: [] }] });
 
-  // Daily bar chart (last 7 days)
-  const barData = useMemo(() => {
+  useEffect(() => {
+    const newPieData = categoryTotals.slice(0, 6).map((c) => ({
+      name: c.name,
+      population: c.amount,
+      color: c.color,
+      legendFontColor: colors.textSecondary,
+      legendFontSize: 12,
+    }));
+
     const days = Array.from({ length: 7 }, (_, i) => {
       const d = subDays(new Date(), 6 - i);
       const key = format(d, 'yyyy-MM-dd');
@@ -83,11 +84,15 @@ const AnalyticsScreen = () => {
       const dayExpenses = filteredExpenses.filter((e) => e.date.startsWith(key));
       return { label, total: sumExpenses(dayExpenses) };
     });
-    return {
+
+    const newBarData = {
       labels: days.map((d) => d.label),
       datasets: [{ data: days.map((d) => d.total || 0) }],
     };
-  }, [filteredExpenses]);
+
+    setPieData(newPieData);
+    setBarData(newBarData);
+  }, [categoryTotals, filteredExpenses, colors.textSecondary]);
 
   const chartConfig = {
     backgroundGradientFrom: colors.card,
@@ -154,6 +159,7 @@ const AnalyticsScreen = () => {
             <Card style={styles.chartCard} elevation="sm">
               <Text style={[styles.chartTitle, { color: colors.text }]}>Daily Spending (7 Days)</Text>
               <BarChart
+                key={`bar-${range}-${barData.datasets[0]?.data.join('-')}`}
                 data={barData}
                 width={CHART_WIDTH}
                 height={180}
@@ -171,6 +177,7 @@ const AnalyticsScreen = () => {
             <Card style={styles.chartCard} elevation="sm">
               <Text style={[styles.chartTitle, { color: colors.text }]}>Spending by Category</Text>
               <PieChart
+                key={`pie-${range}-${pieData.map((p) => p.population).join('-')}`}
                 data={pieData}
                 width={CHART_WIDTH}
                 height={200}

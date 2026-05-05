@@ -44,14 +44,16 @@ const ExpenseItem = ({ expense, onPress, onDelete, currency = 'PHP' }) => {
         {/* Info */}
         <View style={styles.info}>
           <Text style={[styles.categoryName, { color: colors.text }]} numberOfLines={1}>
-            {category.name}
+            {expense.name || category.name}
           </Text>
           {expense.note ? (
             <Text style={[styles.note, { color: colors.textSecondary }]} numberOfLines={1}>
               {truncateText(expense.note, 35)}
             </Text>
           ) : (
-            <Text style={[styles.note, { color: colors.textTertiary }]}>No note</Text>
+            <Text style={[styles.note, { color: colors.textTertiary }]}>
+              {category.name}
+            </Text>
           )}
           <Text style={[styles.time, { color: colors.textTertiary }]}>
             {formatTime(expense.date)}

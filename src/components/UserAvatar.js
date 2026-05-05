@@ -1,9 +1,10 @@
 import * as Speech from 'expo-speech';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, Image, StyleSheet, Text, View } from 'react-native';
+import { SQUIRREL_IMAGE_URI } from '../assets/squirrelAsset';
 import { useTheme } from '../context/ThemeContext';
 import { BorderRadius, Spacing } from '../theme/spacing';
-import { FontSize, FontWeight } from '../theme/typography';
+import { FontFamily, FontSize, FontWeight } from '../theme/typography';
 
 const MASCOTS = ['squirrel', 'rocket', 'star', 'heart', 'smile'];
 
@@ -40,14 +41,10 @@ const getGreetingMessage = (userName, totalExpenses = 0) => {
   return greeting;
 };
 
-const UserAvatar = ({ userName = 'User', mascotType = 'squirrel', size = 'md', customImageUri = null, totalExpenses = 0, enableVoice = false, useDefaultImage = true }) => {
+const UserAvatar = ({ userName = 'User', mascotType = 'squirrel', size = 'md', customImageUri = null, totalExpenses = 0, enableVoice = false }) => {
   const { colors, isDark } = useTheme();
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
-  const messageRef = useRef('');
-  
-  // Default avatar image from assets
-  const DEFAULT_AVATAR = require('../../assets/images/icon.png');
+  const [message, setMessage] = useState(getGreetingMessage(userName, totalExpenses));
 
   useEffect(() => {
     // Subtle bounce animation
@@ -66,20 +63,19 @@ const UserAvatar = ({ userName = 'User', mascotType = 'squirrel', size = 'md', c
 
     Animated.loop(sequence, { iterations: 50 }).start();
     
-    // Generate greeting message
-    messageRef.current = getGreetingMessage(userName, totalExpenses);
+    const greeting = getGreetingMessage(userName, totalExpenses);
+    setMessage(greeting);
     
-    // Speak if voice enabled
-    if (enableVoice && messageRef.current) {
+    if (enableVoice && greeting) {
       setTimeout(() => {
-        Speech.speak(messageRef.current, {
+        Speech.speak(greeting, {
           language: 'en-US',
           pitch: 1.0,
           rate: 0.9,
         });
       }, 500);
     }
-  }, [userName, totalExpenses, enableVoice]);
+  }, [userName, totalExpenses, enableVoice, scaleAnim]);
 
   const sizeConfig = {
     sm: { container: 48, emoji: 24, border: 2 },
@@ -88,6 +84,7 @@ const UserAvatar = ({ userName = 'User', mascotType = 'squirrel', size = 'md', c
   };
 
   const config = sizeConfig[size] || sizeConfig.md;
+  const hasSquirrelAsset = mascotType === 'squirrel';
 
   return (
     <View style={styles.wrapper}>
@@ -107,17 +104,17 @@ const UserAvatar = ({ userName = 'User', mascotType = 'squirrel', size = 'md', c
         ]}
       >
         {customImageUri ? (
-          <Image 
-            source={{ uri: customImageUri }} 
+          <Image
+            source={{ uri: customImageUri }}
             style={{
               width: '100%',
               height: '100%',
               borderRadius: config.container / 2,
             }}
           />
-        ) : useDefaultImage ? (
-          <Image 
-            source={DEFAULT_AVATAR} 
+        ) : hasSquirrelAsset ? (
+          <Image
+            source={{ uri: SQUIRREL_IMAGE_URI }}
             style={{
               width: '100%',
               height: '100%',
@@ -140,7 +137,7 @@ const UserAvatar = ({ userName = 'User', mascotType = 'squirrel', size = 'md', c
           ]}
         >
           <Text style={[styles.speechText, { color: colors.textInverse }]}>
-            {messageRef.current || `Hi ${userName}! 👋`}
+            {message || `Hi ${userName}! 👋`}
           </Text>
         </View>
       )}
@@ -167,16 +164,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.full,
-    maxWidth: 160,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-    shadowOpacity: 0.12,
-    elevation: 3,
+    maxWidth: 190,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 10,
+    shadowOpacity: 0.18,
+    elevation: 4,
   },
   speechText: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semiBold,
+    fontFamily: FontFamily.medium,
     textAlign: 'center',
+    lineHeight: FontSize.sm * 1.4,
   },
 });
 

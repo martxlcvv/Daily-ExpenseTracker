@@ -7,13 +7,13 @@ const ThemeContext = createContext(null);
 
 export const ThemeProvider = ({ children }) => {
   const systemScheme = useColorScheme();
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     (async () => {
       const settings = await getSettings();
-      setIsDark(settings.darkMode ?? (systemScheme === 'dark'));
+      setIsDark(settings.darkMode ?? true);
       setLoaded(true);
     })();
   }, []);

@@ -101,12 +101,18 @@ export const getSettings = async () => {
           currency: 'PHP',
           notificationsEnabled: false,
           notificationTime: '20:00',
-          darkMode: false,
+          darkMode: true,
           monthlyBudget: 15000,
+          walletBalance: 15000,
+          hideWallet: false,
+          shoppingList: [],
+          plannedPayments: [],
+          feedbackEntries: [],
+          donationNumber: '09171234567',
         };
   } catch (e) {
     console.error('StorageService.getSettings error:', e);
-    return { currency: 'PHP', notificationsEnabled: false, darkMode: false, monthlyBudget: 15000 };
+    return { currency: 'PHP', notificationsEnabled: false, darkMode: true, monthlyBudget: 15000 };
   }
 };
 

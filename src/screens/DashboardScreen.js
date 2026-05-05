@@ -1,16 +1,16 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DrawerMenu from '../components/common/DrawerMenu';
 import EmptyState from '../components/common/EmptyState';
 import BalanceCard from '../components/dashboard/BalanceCard';
 import SummaryCard from '../components/dashboard/SummaryCard';
@@ -30,14 +30,14 @@ const DashboardScreen = ({ navigation }) => {
     settings,
     todayTotal,
     weekTotal,
-    monthTotal,
-    budgetUsed,
-    budgetRemaining,
+    totalExpenses,
+    toggleHideWallet,
     deleteExpense,
     loading,
   } = useExpenses();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
   const fabAnim = useRef(new Animated.Value(0)).current;
 
@@ -76,8 +76,7 @@ const DashboardScreen = ({ navigation }) => {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-
+      <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} navigation={navigation} />
       {/* Sticky Header */}
       <Animated.View
         style={[styles.stickyHeader, { backgroundColor: colors.background, opacity: headerOpacity }]}
@@ -104,7 +103,7 @@ const DashboardScreen = ({ navigation }) => {
               </Text>
             </View>
             <TouchableOpacity
-              onPress={() => navigation.navigate('Settings')}
+              onPress={() => setDrawerOpen(true)}
               style={[styles.settingsBtn, { backgroundColor: colors.surfaceSecondary }]}
             >
               <MaterialIcons name="menu" size={24} color={colors.primary} />
@@ -125,10 +124,10 @@ const DashboardScreen = ({ navigation }) => {
 
           {/* Balance Card */}
           <BalanceCard
-            monthTotal={monthTotal}
-            budgetRemaining={budgetRemaining}
-            monthlyBudget={settings.monthlyBudget || 15000}
-            budgetUsed={budgetUsed}
+            walletBalance={settings.walletBalance || 0}
+            hideBalance={settings.hideWallet || false}
+            onToggleHide={toggleHideWallet}
+            totalExpenses={totalExpenses}
             currency={settings.currency}
           />
 
@@ -286,17 +285,26 @@ const styles = StyleSheet.create({
   greetingSection: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: Spacing.xl,
+    alignItems: 'center',
+    marginBottom: Spacing['2xl'],
+    gap: Spacing.md,
   },
   greetingLeft: {
     flex: 1,
   },
-  greeting: { fontSize: FontSize.base, marginBottom: 2 },
-  greetingName: { fontSize: FontSize['2xl'], fontWeight: FontWeight.bold },
+  greeting: {
+    fontSize: FontSize.md,
+    marginBottom: 4,
+    color: '#9CA3AF',
+  },
+  greetingName: {
+    fontSize: FontSize['5xl'],
+    fontWeight: FontWeight.extraBold,
+    letterSpacing: -0.8,
+  },
   settingsBtn: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -305,14 +313,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing['2xl'],
   },
+  walletCard: {
+    width: '100%',
+    borderRadius: BorderRadius['2xl'],
+    borderWidth: 1,
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
+  },
+  walletHeader: {
+    marginBottom: Spacing.sm,
+  },
+  walletTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+  },
+  walletLabel: {
+    fontSize: FontSize.sm,
+    marginTop: Spacing.xs,
+  },
+  walletAmount: {
+    fontSize: FontSize['4xl'],
+    fontWeight: FontWeight.extraBold,
+    marginTop: Spacing.md,
+    letterSpacing: -1,
+  },
+  walletSub: {
+    fontSize: FontSize.sm,
+    marginTop: Spacing.xs,
+  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   sectionTitle: {
-    fontSize: FontSize.lg,
+    fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
     marginBottom: Spacing.md,
   },
@@ -320,22 +356,23 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semiBold,
     marginBottom: Spacing.md,
+    letterSpacing: 0.2,
   },
   summaryRow: {
     flexDirection: 'row',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing['2xl'],
   },
   categoriesScroll: {
     paddingRight: Spacing.base,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing['2xl'],
     gap: Spacing.md,
   },
   categoryChip: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius['2xl'],
     borderWidth: 1,
-    width: 100,
+    minWidth: 130,
     gap: Spacing.xs,
   },
   categoryChipIcon: {
@@ -344,16 +381,17 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: Spacing.xs,
   },
   categoryChipName: {
-    fontSize: FontSize.xs,
-    fontWeight: FontWeight.medium,
-    textAlign: 'center',
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semiBold,
+    textAlign: 'left',
   },
   categoryChipAmount: {
-    fontSize: FontSize.sm,
+    fontSize: FontSize.base,
     fontWeight: FontWeight.bold,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   dateHeader: {
     flexDirection: 'row',
@@ -364,7 +402,7 @@ const styles = StyleSheet.create({
   },
   dateLabel: {
     fontSize: FontSize.sm,
-    fontWeight: FontWeight.semiBold,
+    fontWeight: FontWeight.medium,
     letterSpacing: 0.2,
   },
   dateTotalLabel: {

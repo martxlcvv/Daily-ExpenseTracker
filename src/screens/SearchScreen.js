@@ -1,16 +1,17 @@
-import { MaterialIcons } from '@expo/vector-icons';
-import { useCallback, useMemo, useState } from 'react';
+﻿import { MaterialIcons } from '@expo/vector-icons';
+import { useMemo, useState } from 'react';
 import {
-    FlatList,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EmptyState from '../components/common/EmptyState';
 import ExpenseItem from '../components/expense/ExpenseItem';
+import Input from '../components/common/Input';
 import { useExpenses } from '../context/ExpenseContext';
 import { useTheme } from '../context/ThemeContext';
 import { BorderRadius, Layout, Spacing } from '../theme/spacing';
@@ -24,79 +25,86 @@ const FILTERS = [
   { id: 'month', label: 'This Month' },
 ];
 
-const ExpenseListScreen = ({ navigation }) => {
+const SearchScreen = ({ navigation }) => {
   const { colors, isDark } = useTheme();
-  const { expenses, todayExpenses, weekExpenses, monthExpenses, deleteExpense, settings } =
+  const { searchExpenses, expenses, todayExpenses, weekExpenses, monthExpenses, settings } =
     useExpenses();
-
+  const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
-  const [selectedCategory, setSelectedCategory] = useState(null);
 
-  const filteredExpenses = useMemo(() => {
-    let list;
+  const filteredByDate = useMemo(() => {
     switch (activeFilter) {
-      case 'today': list = todayExpenses; break;
-      case 'week':  list = weekExpenses;  break;
-      case 'month': list = monthExpenses; break;
-      default:      list = expenses;
+      case 'today':
+        return todayExpenses;
+      case 'week':
+        return weekExpenses;
+      case 'month':
+        return monthExpenses;
+      default:
+        return expenses;
     }
-    if (selectedCategory) list = list.filter((e) => e.category === selectedCategory);
-    return list;
-  }, [activeFilter, selectedCategory, expenses, todayExpenses, weekExpenses, monthExpenses]);
+  }, [activeFilter, expenses, todayExpenses, weekExpenses, monthExpenses]);
 
-  const grouped = useMemo(() => groupExpensesByDate(filteredExpenses), [filteredExpenses]);
-  const total = filteredExpenses.reduce((s, e) => s + e.amount, 0);
+  const results = useMemo(() => {
+    if (!query.trim()) return filteredByDate;
+    const matched = searchExpenses(query);
+    return filteredByDate.filter((expense) => matched.some((item) => item.id === expense.id));
+  }, [query, filteredByDate, searchExpenses]);
 
-  const renderGroup = useCallback(
-    ({ item: group }) => (
-      <View>
-        <View style={styles.dateHeader}>
-          <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>
-            {group.displayDate}
-          </Text>
-          <Text style={[styles.dateTotal, { color: colors.primary }]}>
-            {formatCurrency(group.total, settings.currency)}
-          </Text>
-        </View>
-        {group.items.map((exp) => (
-          <ExpenseItem
-            key={exp.id}
-            expense={exp}
-            currency={settings.currency}
-            onPress={() => navigation.navigate('AddExpense', { expense: exp, mode: 'edit' })}
-            onDelete={deleteExpense}
-          />
-        ))}
+  const groupedResults = useMemo(() => groupExpensesByDate(results), [results]);
+
+  const renderGroup = ({ item: group }) => (
+    <View>
+      <View style={styles.dateHeader}>
+        <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>{group.displayDate}</Text>
+        <Text style={[styles.dateTotal, { color: colors.primary }]}> 
+          {formatCurrency(group.total, settings.currency)}
+        </Text>
       </View>
-    ),
-    [colors, settings.currency, deleteExpense, navigation]
+      {group.items.map((expense) => (
+        <ExpenseItem
+          key={expense.id}
+          expense={expense}
+          currency={settings.currency}
+          onPress={() => navigation.navigate('AddExpense', { expense, mode: 'edit' })}
+          onDelete={() => {}}
+        />
+      ))}
+    </View>
   );
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}> 
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <SafeAreaView style={styles.safe} edges={['top']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Expenses</Text>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Search')}
-            style={[styles.searchBtn, { backgroundColor: colors.surfaceSecondary }]}
-          >
-            <MaterialIcons name="search" size={22} color={colors.text} />
+        <View style={styles.header}> 
+          <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, { backgroundColor: colors.surfaceSecondary }]}> 
+            <MaterialIcons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
+          <Text style={[styles.title, { color: colors.text }]}>Search Expenses</Text>
+          <View style={{ width: 42 }} />
         </View>
 
-        {/* Filter Tabs */}
-        <View style={styles.filterRow}>
-          {FILTERS.map((f) => (
+        <View style={styles.searchRow}>
+          <Input
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search by category or note"
+            icon="search"
+            style={styles.searchInput}
+          />
+        </View>
+
+        <View style={styles.filterRow}> 
+          {FILTERS.map((filter) => (
             <TouchableOpacity
-              key={f.id}
-              onPress={() => setActiveFilter(f.id)}
+              key={filter.id}
+              onPress={() => setActiveFilter(filter.id)}
               style={[
                 styles.filterTab,
                 {
-                  backgroundColor: activeFilter === f.id ? colors.primary : colors.surfaceSecondary,
+                  backgroundColor:
+                    activeFilter === filter.id ? colors.primary : colors.surfaceSecondary,
                 },
               ]}
             >
@@ -104,41 +112,32 @@ const ExpenseListScreen = ({ navigation }) => {
                 style={[
                   styles.filterText,
                   {
-                    color: activeFilter === f.id ? '#FFFFFF' : colors.textSecondary,
-                    fontWeight: activeFilter === f.id ? FontWeight.semiBold : FontWeight.regular,
+                    color: activeFilter === filter.id ? '#FFFFFF' : colors.textSecondary,
+                    fontWeight: activeFilter === filter.id ? FontWeight.semiBold : FontWeight.regular,
                   },
                 ]}
               >
-                {f.label}
+                {filter.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Total Summary */}
-        <View
-          style={[styles.totalBar, { backgroundColor: colors.card, borderBottomColor: colors.separator }]}
-        >
-          <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
-            {filteredExpenses.length} transactions
-          </Text>
-          <Text style={[styles.totalAmount, { color: colors.text }]}>
-            Total: {formatCurrency(total, settings.currency)}
-          </Text>
-        </View>
-
-        {/* List */}
-        {grouped.length === 0 ? (
+        {groupedResults.length === 0 ? (
           <EmptyState
-            icon="receipt-long"
-            title="No expenses found"
-            subtitle="Try a different filter or add new expenses"
+            icon="search-off"
+            title={query.trim() ? 'No results found' : 'No expenses yet'}
+            subtitle={
+              query.trim()
+                ? 'Try another keyword or filter.'
+                : 'Add a new expense to see it here.'
+            }
             actionLabel="Add Expense"
             onAction={() => navigation.navigate('AddExpense', { mode: 'add' })}
           />
         ) : (
           <FlatList
-            data={grouped}
+            data={groupedResults}
             keyExtractor={(item) => item.date}
             renderItem={renderGroup}
             contentContainerStyle={styles.list}
@@ -164,12 +163,19 @@ const styles = StyleSheet.create({
     fontSize: FontSize['2xl'],
     fontWeight: FontWeight.bold,
   },
-  searchBtn: {
+  backBtn: {
     width: 42,
     height: 42,
     borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  searchRow: {
+    paddingHorizontal: Layout.screenPadding,
+    marginBottom: Spacing.sm,
+  },
+  searchInput: {
+    borderRadius: BorderRadius['2xl'],
   },
   filterRow: {
     flexDirection: 'row',
@@ -184,22 +190,6 @@ const styles = StyleSheet.create({
   },
   filterText: {
     fontSize: FontSize.sm,
-  },
-  totalBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Layout.screenPadding,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    marginBottom: Spacing.sm,
-  },
-  totalLabel: {
-    fontSize: FontSize.sm,
-  },
-  totalAmount: {
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.bold,
   },
   list: {
     paddingHorizontal: Layout.screenPadding,
@@ -222,4 +212,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ExpenseListScreen;
+export default SearchScreen;

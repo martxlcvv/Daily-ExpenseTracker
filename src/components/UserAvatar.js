@@ -4,6 +4,7 @@ import { Animated, Image, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Spacing } from '../theme/spacing';
 import { FontSize, FontWeight } from '../theme/typography';
+import { getExpenseGreeting } from '../utils/avatarMessages';
 
 const MASCOT_EMOJI = {
   squirrel: '🐿️',
@@ -13,21 +14,6 @@ const MASCOT_EMOJI = {
   smile:    '😊',
 };
 
-const getGreetingMessage = (userName, totalExpenses = 0) => {
-  const hour = new Date().getHours();
-  let greeting =
-    hour < 12  ? `Good morning, ${userName}!` :
-    hour < 17  ? `Good afternoon, ${userName}!` :
-                 `Good evening, ${userName}!`;
-
-  if (totalExpenses > 5000)      greeting += ' Wow, big expenses! 💸';
-  else if (totalExpenses > 2000) greeting += ' Quite a bit spent! 💰';
-  else if (totalExpenses > 0)    greeting += ' Keep tracking! 📊';
-  else                           greeting += ' No expenses yet! 🎉';
-
-  return greeting;
-};
-
 const UserAvatar = ({
   userName = 'User',
   mascotType = 'squirrel',
@@ -35,27 +21,36 @@ const UserAvatar = ({
   customImageUri = null,
   totalExpenses = 0,
   enableVoice = false,
+  showMessage = true,
 }) => {
   const { colors, isDark } = useTheme();
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const [message, setMessage] = useState(getGreetingMessage(userName, totalExpenses));
+  const bounceAnim = useRef(new Animated.Value(0)).current;
+  const [message, setMessage] = useState(getExpenseGreeting(userName, totalExpenses));
+  const [isAnimating, setIsAnimating] = useState(false);
 
   useEffect(() => {
-    // Gentle idle bounce
+    // Gentle idle bounce animation
     const seq = Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 1.06, duration: 600, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 1,    duration: 600, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1.08, duration: 700, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
     ]);
     const loop = Animated.loop(seq, { iterations: -1 });
     loop.start();
 
-    const greeting = getGreetingMessage(userName, totalExpenses);
+    const greeting = getExpenseGreeting(userName, totalExpenses);
     setMessage(greeting);
 
-    if (enableVoice) {
+    if (enableVoice && !isAnimating) {
       const t = setTimeout(() => {
-        Speech.speak(greeting, { language: 'en-US', pitch: 1.0, rate: 0.9 });
-      }, 500);
+        setIsAnimating(true);
+        Speech.speak(greeting, {
+          language: 'fil',
+          pitch: 1.1,
+          rate: 0.95,
+          onDone: () => setIsAnimating(false),
+        });
+      }, 300);
       return () => {
         clearTimeout(t);
         loop.stop();
@@ -72,6 +67,9 @@ const UserAvatar = ({
   const config = sizeConfig[size] || sizeConfig.md;
 
   const emoji = MASCOT_EMOJI[mascotType] || MASCOT_EMOJI.squirrel;
+
+  // Use custom image if available, otherwise use emoji
+  const useCustomImage = customImageUri && customImageUri.length > 0;
 
   return (
     <View style={styles.wrapper}>

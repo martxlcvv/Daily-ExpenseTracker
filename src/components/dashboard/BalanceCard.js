@@ -1,11 +1,13 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { BorderRadius, Shadow, Spacing } from '../../theme/spacing';
+import { BorderRadius, Shadow } from '../../theme/spacing';
 import { FontSize, FontWeight } from '../../theme/typography';
 import { formatCurrency } from '../../utils/formatters';
+import { ResponsiveSize } from '../../utils/responsive';
+import AnimatedButton from '../AnimatedButton';
 
 const BalanceCard = ({
   walletBalance,
@@ -14,77 +16,115 @@ const BalanceCard = ({
   totalExpenses,
   currency = 'PHP',
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const countAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
   useEffect(() => {
-    Animated.timing(countAnim, {
-      toValue: 1,
-      duration: 800,
-      useNativeDriver: true,
-      delay: 100,
-    }).start();
+    Animated.parallel([
+      Animated.timing(countAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        speed: 12,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, [walletBalance]);
 
   const displayBalance = hideBalance ? '••••••' : formatCurrency(walletBalance ?? 0, currency);
 
   return (
-    <LinearGradient
-      colors={['#6C63FF', '#8B85FF']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[styles.card, { ...Shadow.xl, shadowColor: '#6C63FF' }]}
+    <Animated.View
+      style={[
+        {
+          transform: [{ scale: scaleAnim }],
+        },
+      ]}
     >
-      {/* Decorative circles */}
-      <View style={styles.decorCircle1} />
-      <View style={styles.decorCircle2} />
+      <LinearGradient
+        colors={colors.gradientCard}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[
+          styles.card,
+          {
+            ...Shadow.lg,
+            shadowColor: colors.primary,
+          },
+        ]}
+      >
+        {/* Decorative elements */}
+        <View
+          style={[
+            styles.decorCircle1,
+            { backgroundColor: 'rgba(255,255,255,0.08)' },
+          ]}
+        />
+        <View
+          style={[
+            styles.decorCircle2,
+            { backgroundColor: 'rgba(255,255,255,0.05)' },
+          ]}
+        />
 
-      {/* Header with toggle */}
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <Text style={styles.headerLabel}>Wallet Balance</Text>
-          <Text style={styles.subtitle}>Account overview</Text>
+        {/* Header with toggle */}
+        <View style={styles.header}>
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerLabel}>Wallet Balance</Text>
+            <Text style={styles.subtitle}>Account overview</Text>
+          </View>
+          <AnimatedButton
+            onPress={onToggleHide}
+            style={styles.toggleButton}
+            scaleAmount={0.92}
+          >
+            <MaterialIcons
+              name={hideBalance ? 'visibility-off' : 'visibility'}
+              size={ResponsiveSize.icon.medium}
+              color="rgba(255,255,255,0.9)"
+            />
+          </AnimatedButton>
         </View>
-        <TouchableOpacity
-          onPress={onToggleHide}
-          style={styles.toggleButton}
-          activeOpacity={0.7}
-        >
-          <MaterialIcons
-            name={hideBalance ? 'visibility-off' : 'visibility'}
-            size={22}
-            color="rgba(255,255,255,0.9)"
-          />
-        </TouchableOpacity>
-      </View>
 
-      {/* Balance Display */}
-      <Animated.View style={[styles.balanceSection, { opacity: countAnim }]}>
-        <Text style={styles.amount}>{displayBalance}</Text>
-      </Animated.View>
+        {/* Balance Display */}
+        <Animated.View style={[styles.balanceSection, { opacity: countAnim }]}>
+          <Text
+            style={[
+              styles.amount,
+              { fontSize: ResponsiveSize.fontSize['2xl'] },
+            ]}
+          >
+            {displayBalance}
+          </Text>
+        </Animated.View>
 
-      {/* Total Spent Info */}
-      <View style={styles.infoSection}>
-        <Text style={styles.infoLabel}>Total spent</Text>
-        <Text style={styles.infoAmount}>{formatCurrency(totalExpenses, currency)}</Text>
-      </View>
-    </LinearGradient>
+        {/* Total Spent Info */}
+        <View style={styles.infoSection}>
+          <Text style={styles.infoLabel}>Total spent</Text>
+          <Text style={styles.infoAmount}>{formatCurrency(totalExpenses, currency)}</Text>
+        </View>
+      </LinearGradient>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
   card: {
     borderRadius: BorderRadius['2xl'],
-    padding: Spacing.xl,
+    padding: ResponsiveSize.spacing.lg,
     overflow: 'hidden',
-    marginBottom: Spacing.lg,
+    marginBottom: ResponsiveSize.spacing.lg,
+    minHeight: 160,
   },
   decorCircle1: {
     position: 'absolute',
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: 'rgba(255,255,255,0.07)',
     top: -40,
     right: -20,
   },
@@ -93,7 +133,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.05)',
     bottom: -20,
     left: 20,
   },
@@ -101,7 +140,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: Spacing.xl,
+    marginBottom: ResponsiveSize.spacing.lg,
   },
   titleContainer: {
     flex: 1,
@@ -116,7 +155,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: 'rgba(255,255,255,0.65)',
     fontWeight: FontWeight.medium,
-    marginTop: Spacing.xs,
+    marginTop: ResponsiveSize.spacing.xs,
   },
   toggleButton: {
     width: 44,
@@ -125,10 +164,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: Spacing.sm,
+    marginLeft: ResponsiveSize.spacing.sm,
   },
   balanceSection: {
-    marginBottom: Spacing.xl,
+    marginBottom: ResponsiveSize.spacing.lg,
   },
   amount: {
     fontSize: FontSize['5xl'],
@@ -140,7 +179,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: Spacing.lg,
+    paddingTop: ResponsiveSize.spacing.lg,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.15)',
   },

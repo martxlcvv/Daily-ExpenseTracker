@@ -23,12 +23,8 @@ const DEFAULT_SETTINGS = {
   notificationsEnabled: false,
   darkMode: true,
   mascotType: 'squirrel',
-  avatarImage: null,
-  avatarVoice: false,
   shoppingList: [],
   plannedPayments: [],
-  feedbackEntries: [],
-  donationNumber: '09171234567',
 };
 
 export const ExpenseProvider = ({ children }) => {
@@ -36,9 +32,7 @@ export const ExpenseProvider = ({ children }) => {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    initializeData();
-  }, []);
+  useEffect(() => { initializeData(); }, []);
 
   const initializeData = async () => {
     try {
@@ -56,7 +50,14 @@ export const ExpenseProvider = ({ children }) => {
     }
   };
 
-  // ─── Expense Operations ────────────────────────────────────────────
+  // ─── Internal helper ──────────────────────────────────────────────────────
+  const _saveWalletBalance = async (newBalance) => {
+    const clamped = Math.max(0, newBalance);
+    await updateSetting('walletBalance', clamped);
+    setSettings((prev) => ({ ...prev, walletBalance: clamped }));
+  };
+
+  // ─── Expense Operations ───────────────────────────────────────────────────
   const addExpense = async (expenseData) => {
     try {
       const newExpense = {
@@ -66,6 +67,10 @@ export const ExpenseProvider = ({ children }) => {
       };
       const updated = await storageAdd(newExpense);
       if (updated) setExpenses(updated);
+
+      // Auto-deduct from wallet balance
+      await _saveWalletBalance((settings.walletBalance ?? 0) - expenseData.amount);
+
       return newExpense;
     } catch (e) {
       console.error('addExpense error:', e);
@@ -75,8 +80,15 @@ export const ExpenseProvider = ({ children }) => {
 
   const updateExpense = async (id, expenseData) => {
     try {
+      const old = expenses.find((e) => e.id === id);
       const updated = await storageUpdate(id, expenseData);
       if (updated) setExpenses(updated);
+
+      // Adjust wallet by the difference
+      if (old) {
+        const diff = expenseData.amount - old.amount;
+        await _saveWalletBalance((settings.walletBalance ?? 0) - diff);
+      }
     } catch (e) {
       console.error('updateExpense error:', e);
       throw e;
@@ -85,8 +97,14 @@ export const ExpenseProvider = ({ children }) => {
 
   const deleteExpense = async (id) => {
     try {
+      const expense = expenses.find((e) => e.id === id);
       const updated = await storageDelete(id);
       if (updated) setExpenses(updated);
+
+      // Restore to wallet balance
+      if (expense) {
+        await _saveWalletBalance((settings.walletBalance ?? 0) + expense.amount);
+      }
     } catch (e) {
       console.error('deleteExpense error:', e);
       throw e;
@@ -109,7 +127,7 @@ export const ExpenseProvider = ({ children }) => {
     }
   };
 
-  // ─── Computed Values ───────────────────────────────────────────────
+  // ─── Computed Values ──────────────────────────────────────────────────────
   const ranges = getDateRanges();
 
   const todayExpenses = expenses.filter(
@@ -122,17 +140,19 @@ export const ExpenseProvider = ({ children }) => {
     (e) => filterExpensesByDateRange([e], ranges.thisMonth.start, ranges.thisMonth.end).length > 0
   );
 
-  const todayTotal = sumExpenses(todayExpenses);
-  const weekTotal = sumExpenses(weekExpenses);
-  const monthTotal = sumExpenses(monthExpenses);
+  const todayTotal   = sumExpenses(todayExpenses);
+  const weekTotal    = sumExpenses(weekExpenses);
+  const monthTotal   = sumExpenses(monthExpenses);
   const totalExpenses = sumExpenses(expenses);
 
-  const monthlyBudget = settings.monthlyBudget || 15000;
-  const budgetUsed = monthlyBudget > 0 ? (monthTotal / monthlyBudget) * 100 : 0;
+  const monthlyBudget   = settings.monthlyBudget || 15000;
+  const budgetUsed      = monthlyBudget > 0 ? (monthTotal / monthlyBudget) * 100 : 0;
   const budgetRemaining = Math.max(0, monthlyBudget - monthTotal);
-  const currentBalance = (settings.walletBalance ?? 0) - totalExpenses;
 
-  // ─── Settings Operations ──────────────────────────────────────────
+  // walletBalance IS the current balance (auto-deducted per expense)
+  const currentBalance = settings.walletBalance ?? 0;
+
+  // ─── Settings Operations ──────────────────────────────────────────────────
   const updateSettings = async (key, value) => {
     try {
       await updateSetting(key, value);
@@ -176,14 +196,6 @@ export const ExpenseProvider = ({ children }) => {
   const removePlannedPayment = async (paymentId) => {
     const nextList = (settings.plannedPayments || []).filter((i) => i.id !== paymentId);
     await updateSettings('plannedPayments', nextList);
-  };
-
-  const submitFeedback = async (feedback) => {
-    const nextList = [
-      { id: generateId(), message: feedback, submittedAt: new Date().toISOString() },
-      ...(settings.feedbackEntries || []),
-    ];
-    await updateSettings('feedbackEntries', nextList);
   };
 
   const clearAllExpenses = async () => {
@@ -231,7 +243,6 @@ export const ExpenseProvider = ({ children }) => {
     removeShoppingItem,
     addPlannedPayment,
     removePlannedPayment,
-    submitFeedback,
     clearAllExpenses,
     searchExpenses,
   };

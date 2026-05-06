@@ -1,68 +1,89 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { ExpenseProvider, useExpenses } from './src/context/ExpenseContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import AppNavigator from './src/navigation/AppNavigator';
 
-// ── Splash screen (shown for 2.5 s on first launch) ─────────────────────────
+// ── Splash screen ─────────────────────────────────────────────────────────────
 function SplashView({ onDone }) {
-  const { colors, isDark } = useTheme();
+  const { isDark } = useTheme();
   const fade  = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.85)).current;
+  const scale = useRef(new Animated.Value(0.88)).current;
   const spin  = useRef(new Animated.Value(0)).current;
+  const { width } = useWindowDimensions();
+
+  const logoSize = Math.min(width * 0.22, 96);
+  const titleSize = Math.min(width * 0.075, 30);
 
   useEffect(() => {
-    // Appear
+    spin.setValue(0);
+    fade.setValue(0);
+
     Animated.parallel([
-      Animated.timing(fade,  { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, speed: 14, useNativeDriver: true }),
+      Animated.timing(fade,  { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, speed: 16, bounciness: 4, useNativeDriver: true }),
     ]).start();
 
-    // Spinner
     Animated.loop(
-      Animated.timing(spin, { toValue: 1, duration: 1200, useNativeDriver: true })
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 1100,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+      { iterations: -1 }
     ).start();
 
-    // Auto-dismiss
     const t = setTimeout(() => {
-      Animated.timing(fade, { toValue: 0, duration: 400, useNativeDriver: true }).start(() =>
-        onDone()
-      );
+      Animated.timing(fade, { toValue: 0, duration: 350, useNativeDriver: true })
+        .start(() => onDone());
     }, 2500);
-    return () => clearTimeout(t);
+
+    return () => {
+      clearTimeout(t);
+      spin.stopAnimation();
+    };
   }, []);
 
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   return (
-    <View style={[s.splash, { backgroundColor: isDark ? '#0A0A14' : '#6C63FF' }]}>
+    <View style={[s.splash, { backgroundColor: isDark ? '#0F1419' : '#1A0533' }]}>
       <Animated.View style={[s.splashContent, { opacity: fade, transform: [{ scale }] }]}>
-        <View style={s.logoCircle}>
-          <Text style={s.logoEmoji}>💰</Text>
+        <View style={[s.logoCircle, { width: logoSize, height: logoSize, borderRadius: logoSize / 2 }]}>
+          <Text style={{ fontSize: logoSize * 0.52 }}>💰</Text>
         </View>
-        <Text style={s.splashTitle}>Daily Ledger</Text>
+        <Text style={[s.splashTitle, { fontSize: titleSize }]}>Daily Ledger</Text>
         <Text style={s.splashSub}>Track your expenses, reach your goals</Text>
-
-        <Animated.View
-          style={[s.spinner, { borderTopColor: '#FFFFFF', transform: [{ rotate }] }]}
-        />
+        <Animated.View style={[s.spinner, { transform: [{ rotate }] }]} />
         <Text style={s.splashVersion}>v1.0.0</Text>
       </Animated.View>
     </View>
   );
 }
 
-// ── Loading overlay (while AsyncStorage hydrates) ────────────────────────────
+// ── Loading overlay ────────────────────────────────────────────────────────────
 function LoadingView() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const fade = useRef(new Animated.Value(0)).current;
   const spin = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(fade, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    spin.setValue(0);
+    fade.setValue(0);
+
+    Animated.timing(fade, { toValue: 1, duration: 300, useNativeDriver: true }).start();
     Animated.loop(
-      Animated.timing(spin, { toValue: 1, duration: 1000, useNativeDriver: true })
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 950,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+      { iterations: -1 }
     ).start();
+
+    return () => spin.stopAnimation();
   }, []);
 
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
@@ -70,12 +91,13 @@ function LoadingView() {
   return (
     <View style={[s.loading, { backgroundColor: colors.background }]}>
       <Animated.View style={[s.loadingInner, { opacity: fade }]}>
-        <Text style={{ fontSize: 48, marginBottom: 24 }}>💰</Text>
+        <Text style={{ fontSize: 44, marginBottom: 20 }}>💰</Text>
         <Animated.View
-          style={[
-            s.spinner,
-            { borderTopColor: colors.primary, borderColor: colors.primary + '30', transform: [{ rotate }] },
-          ]}
+          style={[s.spinner, {
+            borderColor: colors.primary + '30',
+            borderTopColor: colors.primary,
+            transform: [{ rotate }],
+          }]}
         />
         <Text style={[s.loadingMsg, { color: colors.textSecondary }]}>
           Loading your expenses…
@@ -85,7 +107,7 @@ function LoadingView() {
   );
 }
 
-// ── Inner app wires splash → loading → main ──────────────────────────────────
+// ── Root ──────────────────────────────────────────────────────────────────────
 function AppContent() {
   const { loading } = useExpenses();
   const [showSplash, setShowSplash] = useState(true);
@@ -106,68 +128,46 @@ export default function App() {
 }
 
 const s = StyleSheet.create({
-  // Splash
-  splash: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  splashContent: {
-    alignItems: 'center',
-    gap: 12,
-  },
+  splash: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  splashContent: { alignItems: 'center', gap: 10 },
   logoCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  logoEmoji: { fontSize: 50 },
   splashTitle: {
-    fontSize: 30,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
+    marginTop: 2,
   },
   splashSub: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.75)',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.65)',
     fontWeight: '500',
     textAlign: 'center',
     maxWidth: 220,
+    lineHeight: 18,
   },
   splashVersion: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.45)',
-    marginTop: 8,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    marginTop: 4,
   },
-  // Loading
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingInner: {
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingMsg: {
-    fontSize: 15,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  // Shared spinner
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingInner: { alignItems: 'center', gap: 12 },
+  loadingMsg: { fontSize: 14, fontWeight: '500', textAlign: 'center', marginTop: 4 },
   spinner: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'transparent',
     borderTopColor: '#FFFFFF',
-    marginVertical: 16,
+    borderRightColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: 'transparent',
+    marginVertical: 14,
   },
 });

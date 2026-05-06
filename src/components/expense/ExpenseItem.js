@@ -1,77 +1,76 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRef } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { BorderRadius, Spacing } from '../../theme/spacing';
-import { FontSize, FontWeight } from '../../theme/typography';
+import { BorderRadius } from '../../theme/spacing';
+import { FontWeight } from '../../theme/typography';
 import { getCategoryById } from '../../utils/categories';
 import { formatCurrency, formatTime, truncateText } from '../../utils/formatters';
 
 const ExpenseItem = ({ expense, onPress, onDelete, currency = 'PHP' }) => {
   const { colors, isDark } = useTheme();
+  const { width } = useWindowDimensions();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const category = getCategoryById(expense.category);
 
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start();
-  };
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 50 }).start();
-  };
+  const handlePressIn  = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start();
+  const handlePressOut = () => Animated.spring(scaleAnim, { toValue: 1,    useNativeDriver: true, speed: 50 }).start();
 
   const iconBg = isDark ? category.darkColor : category.lightColor;
+  const iconSize  = Math.min(width * 0.11, 46);
+  const iconInner = iconSize * 0.46;
+  const amtFont   = Math.min(width * 0.038, 15);
+  const nameFont  = Math.min(width * 0.036, 14);
+  const noteFont  = Math.min(width * 0.03, 12);
+  const pad       = width < 380 ? 10 : 12;
 
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+    <Animated.View style={{ transform: [{ scale: scaleAnim }], marginBottom: 6 }}>
       <TouchableOpacity
         activeOpacity={1}
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        style={[
-          styles.container,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.cardBorder,
-          },
-        ]}
+        style={[s.row, {
+          backgroundColor: colors.card,
+          borderColor: colors.cardBorder,
+          padding: pad,
+          borderRadius: BorderRadius.lg,
+        }]}
       >
-        {/* Category Icon */}
-        <View style={[styles.iconContainer, { backgroundColor: iconBg }]}>
-          <MaterialIcons name={category.icon} size={22} color={category.color} />
+        {/* Icon */}
+        <View style={[s.icon, { backgroundColor: iconBg, width: iconSize, height: iconSize, borderRadius: iconSize * 0.3 }]}>
+          <MaterialIcons name={category.icon} size={iconInner} color={category.color} />
         </View>
 
         {/* Info */}
-        <View style={styles.info}>
-          <Text style={[styles.categoryName, { color: colors.text }]} numberOfLines={1}>
+        <View style={s.info}>
+          <Text style={[s.name, { color: colors.text, fontSize: nameFont }]} numberOfLines={1}>
             {expense.name || category.name}
           </Text>
-          {expense.note ? (
-            <Text style={[styles.note, { color: colors.textSecondary }]} numberOfLines={1}>
-              {truncateText(expense.note, 35)}
-            </Text>
-          ) : (
-            <Text style={[styles.note, { color: colors.textTertiary }]}>
-              {category.name}
-            </Text>
-          )}
-          <Text style={[styles.time, { color: colors.textTertiary }]}>
+          {expense.note
+            ? <Text style={[s.note, { color: colors.textSecondary, fontSize: noteFont }]} numberOfLines={1}>
+                {truncateText(expense.note, 32)}
+              </Text>
+            : <Text style={[s.note, { color: colors.textTertiary, fontSize: noteFont }]}>{category.name}</Text>
+          }
+          <Text style={[s.time, { color: colors.textTertiary, fontSize: noteFont - 1 }]}>
             {formatTime(expense.date)}
           </Text>
         </View>
 
-        {/* Amount + Delete */}
-        <View style={styles.rightSection}>
-          <Text style={[styles.amount, { color: colors.text }]}>
+        {/* Amount + delete */}
+        <View style={s.right}>
+          <Text style={[s.amt, { color: colors.text, fontSize: amtFont }]}>
             {formatCurrency(expense.amount, currency)}
           </Text>
           {onDelete && (
             <TouchableOpacity
               onPress={() => onDelete(expense.id)}
-              style={[styles.deleteBtn, { backgroundColor: colors.surfaceSecondary }]}
+              style={[s.delBtn, { backgroundColor: colors.surfaceSecondary }]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <MaterialIcons name="delete-outline" size={16} color={colors.danger} />
+              <MaterialIcons name="delete-outline" size={14} color={colors.danger} />
             </TouchableOpacity>
           )}
         </View>
@@ -80,54 +79,16 @@ const ExpenseItem = ({ expense, onPress, onDelete, currency = 'PHP' }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    marginBottom: Spacing.sm,
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: BorderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.md,
-  },
-  info: {
-    flex: 1,
-    gap: 2,
-  },
-  categoryName: {
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.semiBold,
-  },
-  note: {
-    fontSize: FontSize.sm,
-  },
-  time: {
-    fontSize: FontSize.xs,
-    marginTop: 2,
-  },
-  rightSection: {
-    alignItems: 'flex-end',
-    gap: Spacing.xs,
-    marginLeft: Spacing.sm,
-  },
-  amount: {
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.bold,
-  },
-  deleteBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: BorderRadius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+const s = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', borderWidth: 1 },
+  icon: { alignItems: 'center', justifyContent: 'center', marginRight: 10, flexShrink: 0 },
+  info: { flex: 1, gap: 1 },
+  name: { fontWeight: FontWeight.semiBold },
+  note: {},
+  time: { marginTop: 1 },
+  right: { alignItems: 'flex-end', gap: 4, marginLeft: 8, flexShrink: 0 },
+  amt: { fontWeight: FontWeight.bold },
+  delBtn: { width: 26, height: 26, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
 });
 
 export default ExpenseItem;

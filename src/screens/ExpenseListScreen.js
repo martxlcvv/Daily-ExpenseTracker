@@ -1,60 +1,56 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useCallback, useMemo, useState } from 'react';
 import {
-    FlatList,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EmptyState from '../components/common/EmptyState';
 import ExpenseItem from '../components/expense/ExpenseItem';
 import { useExpenses } from '../context/ExpenseContext';
 import { useTheme } from '../context/ThemeContext';
-import { BorderRadius, Layout, Spacing } from '../theme/spacing';
-import { FontSize, FontWeight } from '../theme/typography';
+import { BorderRadius } from '../theme/spacing';
+import { FontWeight } from '../theme/typography';
 import { formatCurrency, groupExpensesByDate } from '../utils/formatters';
 
 const FILTERS = [
-  { id: 'all', label: 'All' },
+  { id: 'all',   label: 'All' },
   { id: 'today', label: 'Today' },
-  { id: 'week', label: 'This Week' },
+  { id: 'week',  label: 'This Week' },
   { id: 'month', label: 'This Month' },
 ];
 
 const ExpenseListScreen = ({ navigation }) => {
   const { colors, isDark } = useTheme();
-  const { expenses, todayExpenses, weekExpenses, monthExpenses, deleteExpense, settings } =
-    useExpenses();
+  const { width } = useWindowDimensions();
+  const pad = width < 380 ? 14 : 18;
 
+  const { expenses, todayExpenses, weekExpenses, monthExpenses, deleteExpense, settings } = useExpenses();
   const [activeFilter, setActiveFilter] = useState('all');
-  const [selectedCategory, setSelectedCategory] = useState(null);
 
-  const filteredExpenses = useMemo(() => {
-    let list;
+  const filtered = useMemo(() => {
     switch (activeFilter) {
-      case 'today': list = todayExpenses; break;
-      case 'week':  list = weekExpenses;  break;
-      case 'month': list = monthExpenses; break;
-      default:      list = expenses;
+      case 'today': return todayExpenses;
+      case 'week':  return weekExpenses;
+      case 'month': return monthExpenses;
+      default:      return expenses;
     }
-    if (selectedCategory) list = list.filter((e) => e.category === selectedCategory);
-    return list;
-  }, [activeFilter, selectedCategory, expenses, todayExpenses, weekExpenses, monthExpenses]);
+  }, [activeFilter, expenses, todayExpenses, weekExpenses, monthExpenses]);
 
-  const grouped = useMemo(() => groupExpensesByDate(filteredExpenses), [filteredExpenses]);
-  const total = filteredExpenses.reduce((s, e) => s + e.amount, 0);
+  const grouped = useMemo(() => groupExpensesByDate(filtered), [filtered]);
+  const total   = filtered.reduce((s, e) => s + e.amount, 0);
 
   const renderGroup = useCallback(
     ({ item: group }) => (
       <View>
-        <View style={styles.dateHeader}>
-          <Text style={[styles.dateLabel, { color: colors.textSecondary }]}>
-            {group.displayDate}
-          </Text>
-          <Text style={[styles.dateTotal, { color: colors.primary }]}>
+        <View style={s.dateRow}>
+          <Text style={[s.dateLabel, { color: colors.textSecondary }]}>{group.displayDate}</Text>
+          <Text style={[s.dateTotal, { color: colors.primary }]}>
             {formatCurrency(group.total, settings.currency)}
           </Text>
         </View>
@@ -72,62 +68,55 @@ const ExpenseListScreen = ({ navigation }) => {
     [colors, settings.currency, deleteExpense, navigation]
   );
 
+  const labelFont = Math.min(width * 0.036, 14);
+
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <View style={[s.root, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={s.safe} edges={['top']}>
         {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Expenses</Text>
+        <View style={[s.header, { paddingHorizontal: pad }]}>
+          <Text style={[s.title, { color: colors.text, fontSize: Math.min(width * 0.06, 24) }]}>Expenses</Text>
           <TouchableOpacity
             onPress={() => navigation.navigate('Search')}
-            style={[styles.searchBtn, { backgroundColor: colors.surfaceSecondary }]}
+            style={[s.srchBtn, { backgroundColor: colors.surfaceSecondary }]}
           >
-            <MaterialIcons name="search" size={22} color={colors.text} />
+            <MaterialIcons name="search" size={20} color={colors.text} />
           </TouchableOpacity>
         </View>
 
-        {/* Filter Tabs */}
-        <View style={styles.filterRow}>
+        {/* Filter tabs */}
+        <View style={[s.filterRow, { paddingHorizontal: pad }]}>
           {FILTERS.map((f) => (
             <TouchableOpacity
               key={f.id}
               onPress={() => setActiveFilter(f.id)}
-              style={[
-                styles.filterTab,
-                {
-                  backgroundColor: activeFilter === f.id ? colors.primary : colors.surfaceSecondary,
-                },
-              ]}
+              style={[s.filterTab, {
+                backgroundColor: activeFilter === f.id ? colors.primary : colors.surfaceSecondary,
+                paddingHorizontal: width < 380 ? 8 : 12,
+              }]}
             >
-              <Text
-                style={[
-                  styles.filterText,
-                  {
-                    color: activeFilter === f.id ? '#FFFFFF' : colors.textSecondary,
-                    fontWeight: activeFilter === f.id ? FontWeight.semiBold : FontWeight.regular,
-                  },
-                ]}
-              >
+              <Text style={[s.filterText, {
+                color:      activeFilter === f.id ? '#FFFFFF' : colors.textSecondary,
+                fontWeight: activeFilter === f.id ? '600' : '400',
+                fontSize:   labelFont,
+              }]}>
                 {f.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Total Summary */}
-        <View
-          style={[styles.totalBar, { backgroundColor: colors.card, borderBottomColor: colors.separator }]}
-        >
-          <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
-            {filteredExpenses.length} transactions
+        {/* Total bar */}
+        <View style={[s.totalBar, { paddingHorizontal: pad, borderBottomColor: colors.separator, backgroundColor: colors.card }]}>
+          <Text style={[s.totalLabel, { color: colors.textSecondary, fontSize: labelFont }]}>
+            {filtered.length} transactions
           </Text>
-          <Text style={[styles.totalAmount, { color: colors.text }]}>
+          <Text style={[s.totalAmt, { color: colors.text, fontSize: labelFont }]}>
             Total: {formatCurrency(total, settings.currency)}
           </Text>
         </View>
 
-        {/* List */}
         {grouped.length === 0 ? (
           <EmptyState
             icon="receipt-long"
@@ -141,7 +130,7 @@ const ExpenseListScreen = ({ navigation }) => {
             data={grouped}
             keyExtractor={(item) => item.date}
             renderItem={renderGroup}
-            contentContainerStyle={styles.list}
+            contentContainerStyle={[s.list, { paddingHorizontal: pad, paddingBottom: 100 }]}
             showsVerticalScrollIndicator={false}
           />
         )}
@@ -150,76 +139,40 @@ const ExpenseListScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Layout.screenPadding,
-    paddingVertical: Spacing.md,
+    paddingVertical: 12,
   },
-  title: {
-    fontSize: FontSize['2xl'],
-    fontWeight: FontWeight.bold,
-  },
-  searchBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: BorderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: Layout.screenPadding,
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  filterTab: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.full,
-  },
-  filterText: {
-    fontSize: FontSize.sm,
-  },
+  title: { fontWeight: FontWeight.bold },
+  srchBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  filterRow: { flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap' },
+  filterTab: { paddingVertical: 6, borderRadius: BorderRadius.full },
+  filterText: {},
   totalBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Layout.screenPadding,
-    paddingVertical: Spacing.md,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    marginBottom: Spacing.sm,
+    marginBottom: 8,
   },
-  totalLabel: {
-    fontSize: FontSize.sm,
-  },
-  totalAmount: {
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.bold,
-  },
-  list: {
-    paddingHorizontal: Layout.screenPadding,
-    paddingBottom: Layout.tabBarHeight + Spacing.xl,
-  },
-  dateHeader: {
+  totalLabel: {},
+  totalAmt: { fontWeight: FontWeight.bold },
+  list: { paddingTop: 4 },
+  dateRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.sm,
-    marginTop: Spacing.sm,
+    marginBottom: 6,
+    marginTop: 8,
   },
-  dateLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semiBold,
-  },
-  dateTotal: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.bold,
-  },
+  dateLabel: { fontSize: 12, fontWeight: '600' },
+  dateTotal: { fontSize: 12, fontWeight: '700' },
 });
 
 export default ExpenseListScreen;

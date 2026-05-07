@@ -13,10 +13,7 @@ const Card = ({
   const { colors } = useTheme();
 
   const shadowStyle = elevation
-    ? {
-        ...Shadow[elevation],
-        shadowColor: colors.shadow,
-      }
+    ? { ...Shadow[elevation], shadowColor: colors.shadow }
     : {};
 
   if (onPress) {
@@ -24,15 +21,15 @@ const Card = ({
       <Pressable
         onPress={onPress}
         style={({ pressed }) => [
-          styles.card,
+          s.card,
           {
             backgroundColor: colors.card,
             borderRadius: radius,
             padding,
             borderColor: colors.cardBorder,
             ...shadowStyle,
-            opacity: pressed ? 0.92 : 1,
-            transform: [{ scale: pressed ? 0.98 : 1 }],
+            opacity: pressed ? 0.9 : 1,
+            transform: [{ scale: pressed ? 0.987 : 1 }],
           },
           style,
         ]}
@@ -45,7 +42,7 @@ const Card = ({
   return (
     <View
       style={[
-        styles.card,
+        s.card,
         {
           backgroundColor: colors.card,
           borderRadius: radius,
@@ -61,7 +58,7 @@ const Card = ({
   );
 };
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   card: {
     borderWidth: 1,
     overflow: 'hidden',

@@ -1,11 +1,12 @@
 {
   "expo": {
+    "sdkVersion": "51.0.0",
     "name": "Daily Ledger",
     "slug": "daily-expense-tracker",
     "scheme": "dailyexpensetracker",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
@@ -17,11 +18,13 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.raymart.dailyexpensetracker"
+      "bundleIdentifier": "com.raymart.dailyexpensetracker",
+      "buildNumber": "1"
     },
     "android": {
+      "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0F0F1A"
       },
       "package": "com.raymart.dailyexpensetracker",
@@ -49,7 +52,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "29b1cc59-711f-4e90-9bd8-022fcb294a69"
+        "projectId": "83fdd7bd-2b60-4968-88bf-b18d50feef8a"
       }
     }
   }

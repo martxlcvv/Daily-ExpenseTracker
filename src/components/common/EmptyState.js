@@ -1,5 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { Spacing } from '../../theme/spacing';
 import { FontSize, FontWeight } from '../../theme/typography';
@@ -14,26 +15,46 @@ const EmptyState = ({
   style,
 }) => {
   const { colors } = useTheme();
+  const fade  = useRef(new Animated.Value(0)).current;
+  const slide = useRef(new Animated.Value(16)).current;
+  const scale = useRef(new Animated.Value(0.9)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fade,  { toValue: 1, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(slide, { toValue: 0, duration: 380, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, damping: 18, stiffness: 160, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   return (
-    <View style={[styles.container, style]}>
-      <View style={[styles.iconCircle, { backgroundColor: colors.surfaceSecondary }]}>
-        <MaterialIcons name={icon} size={40} color={colors.textTertiary} />
+    <Animated.View style={[
+      styles.container,
+      style,
+      { opacity: fade, transform: [{ translateY: slide }, { scale }] },
+    ]}>
+      {/* Icon ring */}
+      <View style={[styles.iconRing, { backgroundColor: colors.surfaceSecondary, borderColor: colors.cardBorder }]}>
+        <MaterialIcons name={icon} size={36} color={colors.textTertiary} />
       </View>
+
       <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+
       {subtitle && (
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
       )}
+
       {actionLabel && onAction && (
-        <Button
-          title={actionLabel}
-          onPress={onAction}
-          size="sm"
-          fullWidth={false}
-          style={{ marginTop: Spacing.lg }}
-        />
+        <View style={{ marginTop: Spacing.lg }}>
+          <Button
+            title={actionLabel}
+            onPress={onAction}
+            size="sm"
+            fullWidth={false}
+          />
+        </View>
       )}
-    </View>
+    </Animated.View>
   );
 };
 
@@ -43,25 +64,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: Spacing['4xl'],
     paddingHorizontal: Spacing.xl,
+    gap: Spacing.sm,
   },
-  iconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+  iconRing: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   title: {
-    fontSize: FontSize.xl,
+    fontSize: FontSize.lg,
     fontWeight: FontWeight.semiBold,
     textAlign: 'center',
-    marginBottom: Spacing.sm,
+    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: FontSize.base,
+    fontSize: FontSize.sm,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 20,
+    letterSpacing: 0.1,
+    maxWidth: 240,
   },
 });
 

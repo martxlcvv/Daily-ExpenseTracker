@@ -1,45 +1,69 @@
+/**
+ * DrawerMenu.js — Stable slide-in sidebar using Modal
+ * Fixes: glitch on open/close, state resets, layout bleeding
+ */
 import { MaterialIcons } from '@expo/vector-icons';
-import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef } from 'react';
+import {
+  Animated,
+  Dimensions,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useExpenses } from '../../context/ExpenseContext';
 import { useTheme } from '../../context/ThemeContext';
+import { formatCurrency } from '../../utils/formatters';
 
-// Routes that live inside TabNavigator (Home screen)
-const TAB_ROUTES = new Set(['Dashboard', 'Expenses', 'Analytics', 'Search']);
+const DRAWER_WIDTH = Math.min(Dimensions.get('window').width * 0.8, 320);
 
 const MENU_ITEMS = [
-  { label: 'Dashboard',      route: 'Dashboard',      icon: 'dashboard' },
-  { label: 'Expenses',       route: 'Expenses',        icon: 'receipt-long' },
-  { label: 'Analytics',      route: 'Analytics',       icon: 'insights' },
-  { label: 'Search',         route: 'Search',          icon: 'search' },
-  { label: 'Delete History', route: 'DeleteHistory',   icon: 'history' },
-  { label: 'Settings',       route: 'Settings',        icon: 'settings' },
+  { icon: 'dashboard',          label: 'Dashboard',        screen: 'Dashboard',       tab: true  },
+  { icon: 'receipt-long',       label: 'Expenses',         screen: 'Expenses',        tab: true  },
+  { icon: 'insights',           label: 'Analytics',        screen: 'Analytics',       tab: true  },
+  { icon: 'search',             label: 'Search',           screen: 'Search',          tab: true  },
+  { icon: 'shopping-cart',      label: 'Shopping List',    screen: 'ShoppingList',    tab: false },
+  { icon: 'event-note',         label: 'Planned Payments', screen: 'PlannedPayments', tab: false },
+  { icon: 'history',            label: 'Delete History',   screen: 'DeleteHistory',   tab: false },
+  { icon: 'settings',           label: 'Settings',         screen: 'Settings',        tab: false },
 ];
 
-const DrawerMenu = ({ visible, onClose, navigation }) => {
-  const { colors } = useTheme();
-  const slideAnim = useRef(new Animated.Value(-320)).current;
+export default function DrawerMenu({ visible, onClose, navigation }) {
+  const { colors, isDark, toggleTheme } = useTheme();
+  const { settings, expenses } = useExpenses();
+  const insets = useSafeAreaInsets();
+
+  const slideAnim   = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
 
+  // Animate open/close without resetting component state
   useEffect(() => {
     if (visible) {
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 0,
           useNativeDriver: true,
-          speed: 20,
-          bounciness: 4,
+          damping: 20,
+          stiffness: 180,
+          mass: 0.8,
         }),
         Animated.timing(overlayAnim, {
           toValue: 1,
-          duration: 200,
+          duration: 220,
           useNativeDriver: true,
         }),
       ]).start();
     } else {
       Animated.parallel([
         Animated.timing(slideAnim, {
-          toValue: -320,
-          duration: 220,
+          toValue: -DRAWER_WIDTH,
+          duration: 200,
           useNativeDriver: true,
         }),
         Animated.timing(overlayAnim, {
@@ -51,165 +75,216 @@ const DrawerMenu = ({ visible, onClose, navigation }) => {
     }
   }, [visible]);
 
-  if (!visible) return null;
-
-  const handleNavigate = (route) => {
+  const handleNavigate = useCallback((item) => {
     onClose();
-    // Give drawer time to start closing before navigating
+    // Small delay so animation completes before navigation
     setTimeout(() => {
-      if (TAB_ROUTES.has(route)) {
-        // Navigate to the Home stack screen, then jump to the right tab
-        navigation.navigate('Home', { screen: route });
+      if (item.tab) {
+        navigation.navigate('Home', { screen: item.screen });
       } else {
-        navigation.navigate(route);
+        navigation.navigate(item.screen);
       }
-    }, 80);
-  };
+    }, 180);
+  }, [navigation, onClose]);
+
+  const firstName = settings?.firstName || 'User';
+  const currency  = settings?.currency  || 'PHP';
+  const balance   = settings?.walletBalance ?? 0;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* Dimmed backdrop */}
-      <Animated.View
-        style={[styles.backdrop, { opacity: overlayAnim }]}
-        pointerEvents="auto"
-      >
-        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
-      </Animated.View>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      {/* Scrim — tap to close */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: 'rgba(0,0,0,0.55)', opacity: overlayAnim },
+          ]}
+        />
+      </Pressable>
 
-      {/* Sliding panel */}
+      {/* Drawer panel */}
       <Animated.View
         style={[
-          styles.panel,
+          styles.drawer,
           {
-            backgroundColor: colors.surface,
-            borderRightColor: colors.cardBorder,
+            width: DRAWER_WIDTH,
+            backgroundColor: colors.card,
             transform: [{ translateX: slideAnim }],
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom + 12,
           },
         ]}
-        pointerEvents="auto"
       >
-        {/* Header */}
-        <View style={[styles.header, { borderBottomColor: colors.separator }]}>
-          <View style={[styles.logoCircle, { backgroundColor: colors.primary + '20' }]}>
-            <Text style={styles.logoEmoji}>💰</Text>
-          </View>
-          <View style={styles.headerText}>
-            <Text style={[styles.appName, { color: colors.text }]}>Daily Ledger</Text>
-            <Text style={[styles.appTagline, { color: colors.textSecondary }]}>
-              Expense Tracker
+        {/* Header gradient */}
+        <LinearGradient
+          colors={isDark ? ['#1E2548', '#141830'] : ['#6C63FF', '#9D96FF']}
+          style={styles.drawerHeader}
+        >
+          <View style={[styles.avatarCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+            <Text style={styles.avatarInitials}>
+              {firstName.slice(0, 2).toUpperCase()}
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={onClose}
-            style={[styles.closeBtn, { backgroundColor: colors.surfaceSecondary }]}
-          >
-            <MaterialIcons name="close" size={20} color={colors.text} />
-          </TouchableOpacity>
-        </View>
+          <Text style={styles.drawerName}>{firstName}</Text>
+          <Text style={styles.drawerBalance}>
+            {formatCurrency(balance, currency)}
+          </Text>
+          <Text style={styles.drawerBalanceLabel}>Wallet Balance</Text>
 
-        {/* Menu Items */}
-        <View style={styles.menuItems}>
-          {MENU_ITEMS.map((item, index) => (
+          {/* Theme toggle in header */}
+          <TouchableOpacity
+            onPress={toggleTheme}
+            style={styles.themeBtn}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons
+              name={isDark ? 'light-mode' : 'dark-mode'}
+              size={18}
+              color="rgba(255,255,255,0.85)"
+            />
+          </TouchableOpacity>
+        </LinearGradient>
+
+        {/* Nav items */}
+        <ScrollView
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.menuList}
+        >
+          {MENU_ITEMS.map((item) => (
             <TouchableOpacity
-              key={item.route}
-              onPress={() => handleNavigate(item.route)}
-              style={[styles.menuItem]}
-              activeOpacity={0.7}
+              key={item.screen}
+              onPress={() => handleNavigate(item)}
+              activeOpacity={0.72}
+              style={[
+                styles.menuItem,
+                { borderBottomColor: colors.separator },
+              ]}
             >
-              <View
-                style={[styles.itemIcon, { backgroundColor: colors.primary + '18' }]}
-              >
-                <MaterialIcons name={item.icon} size={20} color={colors.primary} />
+              <View style={[styles.menuIcon, { backgroundColor: colors.surfaceSecondary }]}>
+                <MaterialIcons name={item.icon} size={19} color={colors.primary} />
               </View>
-              <Text style={[styles.itemLabel, { color: colors.text }]}>{item.label}</Text>
+              <Text style={[styles.menuLabel, { color: colors.text }]}>{item.label}</Text>
               <MaterialIcons name="chevron-right" size={18} color={colors.textTertiary} />
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
 
         {/* Footer */}
-        <View style={[styles.footer, { borderTopColor: colors.separator }]}>
+        <View style={[styles.drawerFooter, { borderTopColor: colors.separator }]}>
           <Text style={[styles.footerText, { color: colors.textTertiary }]}>
-            v1.0.0 · Made with ❤️
+            Daily Ledger • v1.0.0
           </Text>
         </View>
       </Animated.View>
-    </View>
+    </Modal>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex: 998,
-  },
-  panel: {
+  drawer: {
     position: 'absolute',
     top: 0,
     left: 0,
     bottom: 0,
-    width: '76%',
-    maxWidth: 320,
-    zIndex: 999,
-    borderRightWidth: 1,
-    paddingTop: 60,
+    elevation: 24,
+    shadowOffset: { width: 4, height: 0 },
+    shadowRadius: 20,
+    shadowOpacity: 0.3,
   },
-  header: {
-    flexDirection: 'row',
+  drawerHeader: {
+    padding: 24,
+    paddingTop: 20,
+    paddingBottom: 28,
     alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingBottom: 20,
+    gap: 4,
+  },
+  avatarCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 10,
-    borderBottomWidth: 1,
-    gap: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
-  logoCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  avatarInitials: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 1,
+  },
+  drawerName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  drawerBalance: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+    marginTop: 6,
+  },
+  drawerBalanceLabel: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '500',
+    letterSpacing: 0.5,
+  },
+  themeBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoEmoji: { fontSize: 22 },
-  headerText: { flex: 1 },
-  appName: { fontSize: 16, fontWeight: '700' },
-  appTagline: { fontSize: 12, marginTop: 1 },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
+  menuList: {
+    paddingTop: 8,
+    paddingBottom: 8,
   },
-  menuItems: { paddingHorizontal: 12, paddingTop: 8 },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 13,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    marginBottom: 2,
+    paddingHorizontal: 18,
     gap: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  itemIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  menuIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  itemLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    borderTopWidth: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+  menuLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
   },
-  footerText: { fontSize: 12, textAlign: 'center' },
+  drawerFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.3,
+  },
 });
-
-export default DrawerMenu;

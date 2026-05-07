@@ -1,12 +1,13 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRef, useState } from 'react';
 import {
-    Animated,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Animated,
+  Easing,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { BorderRadius, Spacing } from '../../theme/spacing';
@@ -36,54 +37,64 @@ const Input = ({
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const borderAnim = useRef(new Animated.Value(0)).current;
+  const focusAnim = useRef(new Animated.Value(0)).current;
 
   const handleFocus = () => {
     setFocused(true);
-    Animated.timing(borderAnim, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
+    Animated.timing(focusAnim, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
   };
 
   const handleBlur = () => {
     setFocused(false);
-    Animated.timing(borderAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
+    Animated.timing(focusAnim, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: false }).start();
   };
 
-  const borderColor = borderAnim.interpolate({
+  const borderColor = focusAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [error ? colors.danger : colors.border, error ? colors.danger : colors.primary],
+    outputRange: [
+      error ? colors.danger : colors.border,
+      error ? colors.danger : colors.primary,
+    ],
+  });
+
+  const borderWidth = focusAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1.5, 2],
   });
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[s.container, style]}>
       {label && (
-        <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
+        <Text style={[s.label, { color: colors.textSecondary }]}>{label}</Text>
       )}
+
       <Animated.View
         style={[
-          styles.inputWrapper,
+          s.inputWrapper,
           {
             backgroundColor: colors.surface,
             borderColor,
-            borderWidth: focused ? 2 : 1.5,
+            borderWidth,
+            borderRadius: BorderRadius.md,
           },
         ]}
       >
         {icon && (
-          <View style={styles.iconLeft}>
-            <MaterialIcons name={icon} size={20} color={focused ? colors.primary : colors.textTertiary} />
+          <View style={s.iconLeft}>
+            <MaterialIcons
+              name={icon}
+              size={19}
+              color={focused ? colors.primary : colors.textTertiary}
+            />
           </View>
         )}
+
         {prefix && (
-          <Text style={[styles.prefix, { color: colors.textSecondary }]}>{prefix}</Text>
+          <Text style={[s.prefix, { color: focused ? colors.text : colors.textSecondary }]}>
+            {prefix}
+          </Text>
         )}
+
         <TextInput
           value={value}
           onChangeText={onChangeText}
@@ -101,7 +112,7 @@ const Input = ({
           onSubmitEditing={onSubmitEditing}
           maxLength={maxLength}
           style={[
-            styles.input,
+            s.input,
             {
               color: colors.text,
               flex: 1,
@@ -111,28 +122,32 @@ const Input = ({
             inputStyle,
           ]}
         />
+
         {secureTextEntry && (
           <TouchableOpacity
-            onPress={() => setShowPassword(!showPassword)}
-            style={styles.iconRight}
+            onPress={() => setShowPassword((v) => !v)}
+            style={s.iconRight}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <MaterialIcons
               name={showPassword ? 'visibility' : 'visibility-off'}
-              size={20}
+              size={19}
               color={colors.textTertiary}
             />
           </TouchableOpacity>
         )}
-        {rightElement && <View style={styles.iconRight}>{rightElement}</View>}
+
+        {rightElement && <View style={s.iconRight}>{rightElement}</View>}
       </Animated.View>
+
       {error && (
-        <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
+        <Text style={[s.errorText, { color: colors.danger }]}>{error}</Text>
       )}
     </View>
   );
 };
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: {
     marginBottom: Spacing.base,
   },
@@ -140,34 +155,32 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: FontWeight.medium,
     marginBottom: Spacing.xs,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
     minHeight: 52,
   },
   input: {
     fontSize: FontSize.base,
     paddingVertical: Spacing.md,
+    letterSpacing: 0.1,
   },
-  iconLeft: {
-    marginRight: Spacing.sm,
-  },
-  iconRight: {
-    marginLeft: Spacing.sm,
-  },
+  iconLeft:  { marginRight: Spacing.sm },
+  iconRight: { marginLeft: Spacing.sm },
   prefix: {
     fontSize: FontSize.lg,
     fontWeight: FontWeight.semiBold,
     marginRight: Spacing.xs,
+    letterSpacing: -0.3,
   },
   errorText: {
     fontSize: FontSize.xs,
     marginTop: Spacing.xs,
-    marginLeft: Spacing.xs,
+    marginLeft: 2,
+    letterSpacing: 0.1,
   },
 });
 

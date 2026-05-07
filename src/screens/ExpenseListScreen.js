@@ -135,6 +135,15 @@ const ExpenseListScreen = ({ navigation }) => {
           />
         )}
       </SafeAreaView>
+      <View style={[s.fab, { right: pad, bottom: 24 }]}> 
+        <TouchableOpacity
+          onPress={() => navigation.navigate('AddExpense', { mode: 'add' })}
+          style={[s.fabBtn, { backgroundColor: colors.primary }]}
+          activeOpacity={0.85}
+        >
+          <MaterialIcons name="add" size={26} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -170,6 +179,14 @@ const s = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
     marginTop: 8,
+  },
+  fab: { position: 'absolute' },
+  fabBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dateLabel: { fontSize: 12, fontWeight: '600' },
   dateTotal: { fontSize: 12, fontWeight: '700' },

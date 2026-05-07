@@ -1,8 +1,13 @@
+/**
+ * DashboardScreen.js — Improved
+ * Fixes: sidebar glitch (uses new Modal-based DrawerMenu), wallet edit shortcut,
+ *        animated avatar with speaking bubble, smoother FAB
+ */
 import { MaterialIcons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
-  Image,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -14,90 +19,143 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DrawerMenu from '../components/common/DrawerMenu';
 import EmptyState from '../components/common/EmptyState';
-import BalanceCard from '../components/dashboard/BalanceCard';
-import SummaryCard from '../components/dashboard/SummaryCard';
 import ExpenseItem from '../components/expense/ExpenseItem';
+import UserAvatar from '../components/UserAvatar';
 import { useExpenses } from '../context/ExpenseContext';
 import { useTheme } from '../context/ThemeContext';
-import { BorderRadius, Shadow, Spacing } from '../theme/spacing';
 import { getCategoryById } from '../utils/categories';
 import { formatCurrency, groupExpensesByDate } from '../utils/formatters';
 
-// Place your avatar image at assets/avatar.png
-let AVATAR_SRC;
-try { AVATAR_SRC = require('../../assets/avatar.png'); } catch { AVATAR_SRC = null; }
+// ── Avatar messages cycling ───────────────────────────────────────────────────
+const AVATAR_MESSAGES = [
+  'Hey! Track your spending 💪',
+  'Don\'t forget to log today\'s expenses!',
+  'You\'re doing great, keep it up!',
+  'Save a little every day 🌱',
+  'Check your Analytics tab!',
+];
 
-const AVATAR_NAME = 'Marty';
-
-const DashboardScreen = ({ navigation }) => {
-  const { colors, isDark } = useTheme();
-  const { width } = useWindowDimensions();
-  const pad = width < 380 ? 14 : 18;
-
-  const {
-    expenses,
-    settings,
-    todayTotal,
-    weekTotal,
-    currentBalance,
-    totalExpenses,
-    toggleHideWallet,
-    deleteExpense,
-  } = useExpenses();
-
-  const [refreshing, setRefreshing] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const fabAnim  = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scrollY  = useRef(new Animated.Value(0)).current;
-
+// ── Staggered entrance wrapper ───────────────────────────────────────────────
+const FadeSlide = ({ children, delay = 0, style }) => {
+  const anim  = useRef(new Animated.Value(0)).current;
+  const slide = useRef(new Animated.Value(18)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(fabAnim,  { toValue: 1, delay: 400, useNativeDriver: true, speed: 10 }),
-      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(anim,  { toValue: 1, duration: 380, delay, useNativeDriver: true }),
+      Animated.timing(slide, { toValue: 0, duration: 340, delay, useNativeDriver: true }),
     ]).start();
   }, []);
+  return (
+    <Animated.View style={[{ opacity: anim, transform: [{ translateY: slide }] }, style]}>
+      {children}
+    </Animated.View>
+  );
+};
 
-  const onRefresh = async () => {
+// ── Main ─────────────────────────────────────────────────────────────────────
+const DashboardScreen = ({ navigation }) => {
+  const { colors, isDark } = useTheme();
+  const { width }          = useWindowDimensions();
+  const pad = width < 380 ? 16 : 20;
+
+  const {
+    expenses, settings, todayTotal, weekTotal,
+    currentBalance, toggleHideWallet, deleteExpense,
+  } = useExpenses();
+
+  const [refreshing,    setRefreshing]    = useState(false);
+  const [drawerOpen,    setDrawerOpen]    = useState(false);
+  const [hideBalance,   setHideBalance]   = useState(settings.hideWallet || false);
+  const [avatarMsg,     setAvatarMsg]     = useState('');
+  const [isSpeaking,    setIsSpeaking]    = useState(false);
+  const [msgIndex,      setMsgIndex]      = useState(0);
+
+  const fabAnim  = useRef(new Animated.Value(0)).current;
+  const fabScale = useRef(new Animated.Value(1)).current;
+  const scrollY  = useRef(new Animated.Value(0)).current;
+
+  // Avatar speaking cycle — fires after mount
+  useEffect(() => {
+    Animated.spring(fabAnim, {
+      toValue: 1, delay: 600,
+      useNativeDriver: true, damping: 14, stiffness: 120,
+    }).start();
+
+    const speakCycle = () => {
+      setMsgIndex((i) => {
+        const next = (i + 1) % AVATAR_MESSAGES.length;
+        setAvatarMsg(AVATAR_MESSAGES[next]);
+        setIsSpeaking(true);
+        setTimeout(() => { setIsSpeaking(false); setAvatarMsg(''); }, 3800);
+        return next;
+      });
+    };
+
+    // First message after 1.5s
+    const t1 = setTimeout(speakCycle, 1500);
+    // Then repeat every 12s
+    const interval = setInterval(speakCycle, 12000);
+    return () => { clearTimeout(t1); clearInterval(interval); };
+  }, []);
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 700);
+  }, []);
+
+  const openDrawer  = useCallback(() => setDrawerOpen(true),  []);
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+
+  const toggleBalance = () => {
+    setHideBalance((v) => !v);
+    toggleHideWallet?.();
   };
 
-  const recentGroups = groupExpensesByDate(expenses.slice(0, 20));
+  const fabPressIn  = () => Animated.spring(fabScale, { toValue: 0.88, useNativeDriver: true, speed: 40 }).start();
+  const fabPressOut = () => Animated.spring(fabScale, { toValue: 1,    useNativeDriver: true, speed: 20 }).start();
 
-  const categoryTotals = expenses.reduce((acc, exp) => {
-    acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
+  const recentGroups   = groupExpensesByDate(expenses.slice(0, 20));
+  const categoryTotals = expenses.reduce((acc, e) => {
+    acc[e.category] = (acc[e.category] || 0) + e.amount;
     return acc;
   }, {});
-
   const topCategories = Object.entries(categoryTotals)
     .sort(([, a], [, b]) => b - a)
-    .slice(0, 4)
+    .slice(0, 5)
     .map(([id, total]) => ({ ...getCategoryById(id), total }));
 
   const greetHour  = new Date().getHours();
-  const greetLabel = greetHour < 12 ? 'Good morning' : greetHour < 17 ? 'Good afternoon' : 'Good evening';
-
-  const assistantMsg = todayTotal > 0
-    ? `You've spent ${formatCurrency(todayTotal, settings.currency)} today.`
-    : "No expenses logged today. Stay on budget! 🎯";
+  const greetLabel = greetHour < 5 ? 'Good night' : greetHour < 12 ? 'Good morning' : greetHour < 17 ? 'Good afternoon' : 'Good evening';
+  const greetEmoji = greetHour < 5 ? '🌙' : greetHour < 12 ? '☀️' : greetHour < 17 ? '🌤️' : '🌙';
 
   const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 60], outputRange: [0, 1], extrapolate: 'clamp',
+    inputRange: [0, 50], outputRange: [0, 1], extrapolate: 'clamp',
   });
 
-  // Responsive sizes
-  const avatarSize = Math.min(width * 0.18, 72);
-  const summaryCardWidth = (width - pad * 2 - 10) / 2;
+  const currency  = settings.currency  || 'PHP';
+  const firstName = settings.firstName || 'User';
+
+  const heroGradient = isDark
+    ? ['#141830', '#1E2548', '#141830']
+    : ['#6C63FF', '#8A7FFF', '#5A52E0'];
 
   return (
     <View style={[s.root, { backgroundColor: colors.background }]}>
-      <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} navigation={navigation} />
+      {/*
+        DrawerMenu is now a Modal — renders outside this tree,
+        so it NEVER causes layout resets when opened/closed.
+      */}
+      <DrawerMenu visible={drawerOpen} onClose={closeDrawer} navigation={navigation} />
 
-      {/* Sticky header hint */}
+      {/* Scroll-reveal sticky bar */}
       <Animated.View
-        style={[s.stickyHdr, { backgroundColor: colors.background, opacity: headerOpacity, paddingHorizontal: pad }]}
         pointerEvents="none"
+        style={[s.stickyBar, {
+          opacity: headerOpacity,
+          backgroundColor: colors.background,
+          borderBottomColor: colors.separator,
+          paddingHorizontal: pad,
+        }]}
       >
         <Text style={[s.stickyTitle, { color: colors.text }]}>Dashboard</Text>
       </Animated.View>
@@ -106,166 +164,245 @@ const DashboardScreen = ({ navigation }) => {
         <Animated.ScrollView
           contentContainerStyle={[s.scroll, { paddingHorizontal: pad }]}
           showsVerticalScrollIndicator={false}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: false }
+          )}
           scrollEventThrottle={16}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
           }
         >
-          <Animated.View style={{ opacity: fadeAnim }}>
-            {/* ── Top Row ── */}
-            <View style={[s.topRow, { marginBottom: Spacing.md }]}>
+          {/* ── Top row ── */}
+          <FadeSlide delay={0}>
+            <View style={[s.topRow, { marginBottom: 22 }]}>
+              <TouchableOpacity
+                onPress={openDrawer}
+                style={[s.menuBtn, { backgroundColor: colors.surfaceSecondary }]}
+                activeOpacity={0.75}
+              >
+                <MaterialIcons name="menu" size={20} color={colors.text} />
+              </TouchableOpacity>
 
-
-              <View style={s.greetWrap}>
-                <Text style={[s.greetSub, { color: colors.textSecondary, fontSize: width < 380 ? 11 : 12 }]}>{greetLabel},</Text>
-                <Text style={[s.greetName, { color: colors.text, fontSize: Math.min(width * 0.052, 20) }]} numberOfLines={1}>
-                  {settings.firstName || 'User'} 👋
+              <View style={s.greetBlock}>
+                <Text style={[s.greetSub, { color: colors.textSecondary }]}>
+                  {greetLabel} {greetEmoji}
+                </Text>
+                <Text style={[s.greetName, { color: colors.text }]} numberOfLines={1}>
+                  {firstName}
                 </Text>
               </View>
+
+              {/* Avatar — navigates to Settings on press */}
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Settings')}
+                activeOpacity={0.88}
+              >
+                <UserAvatar
+                  size="sm"
+                  message={avatarMsg}
+                  showBubble={!!avatarMsg}
+                  isSpeaking={isSpeaking}
+                />
+              </TouchableOpacity>
             </View>
+          </FadeSlide>
 
-            {/* ── Tarsi Talking Avatar Strip ── */}
-            <View style={[s.tarsiStrip, {
-              backgroundColor: colors.card,
-              borderColor: colors.cardBorder,
-              marginBottom: Spacing.lg,
-            }]}>
-              {/* Avatar image */}
-              <View style={[s.tarsiImgWrap, { backgroundColor: colors.primary + '15' }]}>
-                {AVATAR_SRC
-                  ? <Image source={AVATAR_SRC} style={s.tarsiImg} resizeMode="cover" />
-                  : <Text style={{ fontSize: 36 }}>🐿️</Text>
-                }
-              </View>
+          {/* ── Hero balance card ── */}
+          <FadeSlide delay={60}>
+            <LinearGradient
+              colors={heroGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.heroCard}
+            >
+              <View style={s.orb1} />
+              <View style={s.orb2} />
 
-              {/* Speech content */}
-              <View style={s.tarsiContent}>
-                <Text style={[s.tarsiName, { color: colors.primary }]}>{AVATAR_NAME}</Text>
-                <Text style={[s.tarsiMsg, { color: colors.text }]} numberOfLines={3}>
-                  {assistantMsg}
-                </Text>
-              </View>
-            </View>
-
-            {/* ── Balance Card ── */}
-            <BalanceCard
-              walletBalance={currentBalance}
-              hideBalance={settings.hideWallet || false}
-              onToggleHide={toggleHideWallet}
-              totalExpenses={totalExpenses}
-              currency={settings.currency}
-            />
-
-            {/* ── Summary Cards ── */}
-            <Text style={[s.sectionTitle, { color: colors.text, marginBottom: Spacing.sm }]}>Overview</Text>
-            <View style={[s.summaryRow, { marginBottom: Spacing.xl }]}>
-              <SummaryCard
-                label="Today"
-                amount={todayTotal}
-                icon="today"
-                color="#6C63FF"
-                currency={settings.currency}
-                style={{ width: summaryCardWidth }}
-              />
-              <SummaryCard
-                label="This Week"
-                amount={weekTotal}
-                icon="date-range"
-                color="#43D9AD"
-                currency={settings.currency}
-                style={{ width: summaryCardWidth }}
-              />
-            </View>
-
-            {/* ── Top Categories ── */}
-            {topCategories.length > 0 && (
-              <>
-                <View style={s.sectionHeader}>
-                  <Text style={[s.sectionTitle, { color: colors.text }]}>Top Categories</Text>
-                  <TouchableOpacity onPress={() => navigation.navigate('Home', { screen: 'Analytics' })}>
-                    <Text style={[s.seeAll, { color: colors.primary }]}>See all →</Text>
+              <View style={s.heroBody}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.heroCaption}>WALLET BALANCE</Text>
+                  <Text style={s.heroAmount} numberOfLines={1}>
+                    {hideBalance ? '• • • • • •' : formatCurrency(currentBalance, currency)}
+                  </Text>
+                  <Text style={s.heroSub}>
+                    {expenses.length} expense{expenses.length !== 1 ? 's' : ''} total
+                  </Text>
+                </View>
+                <View style={s.heroRight}>
+                  <TouchableOpacity onPress={toggleBalance} style={s.eyeBtn} activeOpacity={0.8}>
+                    <MaterialIcons
+                      name={hideBalance ? 'visibility-off' : 'visibility'}
+                      size={19}
+                      color="rgba(255,255,255,0.7)"
+                    />
+                  </TouchableOpacity>
+                  {/* Wallet edit shortcut */}
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('Settings')}
+                    style={[s.eyeBtn, { marginTop: 6 }]}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="edit" size={17} color="rgba(255,255,255,0.55)" />
                   </TouchableOpacity>
                 </View>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={[s.catScroll, { gap: Spacing.sm }]}
-                >
-                  {topCategories.map((cat) => (
-                    <View
-                      key={cat.id}
-                      style={[s.catChip, {
-                        backgroundColor: colors.card,
-                        borderColor: colors.cardBorder,
-                        width: Math.min(width * 0.35, 140),
-                        ...Shadow.sm,
-                        shadowColor: colors.shadow,
-                      }]}
-                    >
-                      <View style={[s.catChipIcon, { backgroundColor: isDark ? cat.darkColor : cat.lightColor }]}>
-                        <MaterialIcons name={cat.icon} size={18} color={cat.color} />
-                      </View>
-                      <Text style={[s.catChipName, { color: colors.textSecondary }]} numberOfLines={1}>
-                        {cat.name.split(' ')[0]}
-                      </Text>
-                      <Text style={[s.catChipAmt, { color: colors.text }]} numberOfLines={1}>
-                        {formatCurrency(cat.total, settings.currency)}
-                      </Text>
-                    </View>
-                  ))}
-                </ScrollView>
-              </>
-            )}
+              </View>
 
-            {/* ── Recent Expenses ── */}
-            <View style={[s.sectionHeader, { marginTop: Spacing.lg }]}>
-              <Text style={[s.sectionTitle, { color: colors.text }]}>Recent Expenses</Text>
+              {/* Stats strip */}
+              <View style={s.statsStrip}>
+                {[
+                  { icon: 'today',      label: 'Today',     val: hideBalance ? '••••' : formatCurrency(todayTotal, currency),  tint: '#FF6B6B' },
+                  { icon: 'date-range', label: 'This Week', val: hideBalance ? '••••' : formatCurrency(weekTotal, currency),   tint: '#43D9AD' },
+                  { icon: 'receipt',    label: 'Entries',   val: String(expenses.length),                                      tint: '#F7B731' },
+                ].map((st, i) => (
+                  <View key={st.label} style={[s.statItem, i < 2 && s.statBorder]}>
+                    <View style={s.statIconRow}>
+                      <MaterialIcons name={st.icon} size={11} color={st.tint} />
+                      <Text style={s.statLabel}>{st.label}</Text>
+                    </View>
+                    <Text style={s.statVal} numberOfLines={1}>{st.val}</Text>
+                  </View>
+                ))}
+              </View>
+            </LinearGradient>
+          </FadeSlide>
+
+          {/* ── Quick action row ── */}
+          <FadeSlide delay={120}>
+            <View style={[s.quickRow, { marginBottom: 26 }]}>
+              {[
+                { icon: 'add',        label: 'Add',       color: '#6C63FF', onPress: () => navigation.navigate('AddExpense', { mode: 'add' }) },
+                { icon: 'search',     label: 'Search',    color: '#43D9AD', onPress: () => navigation.navigate('Search') },
+                { icon: 'insights',   label: 'Analytics', color: '#FF8C42', onPress: () => navigation.navigate('Home', { screen: 'Analytics' }) },
+                { icon: 'event-note', label: 'Planned',   color: '#F7B731', onPress: () => navigation.navigate('PlannedPayments') },
+              ].map((q) => (
+                <TouchableOpacity
+                  key={q.label}
+                  onPress={q.onPress}
+                  activeOpacity={0.78}
+                  style={[s.quickBtn, { backgroundColor: colors.card, borderColor: q.color + '22' }]}
+                >
+                  <View style={[s.quickIcon, { backgroundColor: q.color + '16' }]}>
+                    <MaterialIcons name={q.icon} size={20} color={q.color} />
+                  </View>
+                  <Text style={[s.quickLabel, { color: colors.textSecondary }]}>{q.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </FadeSlide>
+
+          {/* ── Top categories ── */}
+          {topCategories.length > 0 && (
+            <FadeSlide delay={180}>
+              <View style={s.sectionRow}>
+                <Text style={[s.sectionTitle, { color: colors.text }]}>Top Categories</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Home', { screen: 'Analytics' })}>
+                  <Text style={[s.seeAll, { color: colors.primary }]}>See all →</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 10, paddingRight: 4, paddingBottom: 22 }}
+                keyboardShouldPersistTaps="handled"
+              >
+                {topCategories.map((cat) => (
+                  <View
+                    key={cat.id}
+                    style={[s.catCard, {
+                      backgroundColor: colors.card,
+                      borderColor: cat.color + '25',
+                      shadowColor: cat.color,
+                    }]}
+                  >
+                    <View style={[s.catIcon, { backgroundColor: cat.color + '18' }]}>
+                      <MaterialIcons name={cat.icon} size={20} color={cat.color} />
+                    </View>
+                    <Text style={[s.catName, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {cat.name.split(' ')[0]}
+                    </Text>
+                    <Text style={[s.catAmt, { color: colors.text }]} numberOfLines={1}>
+                      {formatCurrency(cat.total, currency)}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+            </FadeSlide>
+          )}
+
+          {/* ── Recent expenses ── */}
+          <FadeSlide delay={220}>
+            <View style={s.sectionRow}>
+              <Text style={[s.sectionTitle, { color: colors.text }]}>Recent</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Home', { screen: 'Expenses' })}>
                 <Text style={[s.seeAll, { color: colors.primary }]}>See all →</Text>
               </TouchableOpacity>
             </View>
+          </FadeSlide>
 
-            {recentGroups.length === 0 ? (
-              <EmptyState
-                icon="receipt-long"
-                title="No expenses yet"
-                subtitle="Tap + to log your first expense"
-              />
-            ) : (
-              recentGroups.slice(0, 3).map((group) => (
-                <View key={group.date}>
-                  <View style={s.dateRow}>
-                    <Text style={[s.dateLabel, { color: colors.textSecondary }]}>{group.displayDate}</Text>
-                    <Text style={[s.dateTotal, { color: colors.textSecondary }]}>
-                      {formatCurrency(group.total, settings.currency)}
+          {recentGroups.length === 0 ? (
+            <EmptyState
+              icon="receipt-long"
+              title="No expenses yet"
+              subtitle="Tap + to log your first expense"
+            />
+          ) : (
+            recentGroups.slice(0, 3).map((group, gi) => (
+              <FadeSlide key={group.date} delay={240 + gi * 50}>
+                <View style={[s.groupCard, {
+                  backgroundColor: colors.card,
+                  borderColor: colors.separator,
+                }]}>
+                  <View style={[s.groupHeader, { borderBottomColor: colors.separator }]}>
+                    <Text style={[s.groupDate, { color: colors.textSecondary }]}>
+                      {group.displayDate.toUpperCase()}
+                    </Text>
+                    <Text style={[s.groupTotal, { color: colors.primary }]}>
+                      {formatCurrency(group.total, currency)}
                     </Text>
                   </View>
-                  {group.items.slice(0, 3).map((expense) => (
+                  {group.items.slice(0, 4).map((expense) => (
                     <ExpenseItem
                       key={expense.id}
                       expense={expense}
-                      currency={settings.currency}
+                      currency={currency}
                       onPress={() => navigation.navigate('AddExpense', { expense, mode: 'edit' })}
                       onDelete={deleteExpense}
                     />
                   ))}
                 </View>
-              ))
-            )}
+              </FadeSlide>
+            ))
+          )}
 
-            <View style={{ height: 100 }} />
-          </Animated.View>
+          <View style={{ height: 110 }} />
         </Animated.ScrollView>
       </SafeAreaView>
 
-      {/* FAB */}
-      <Animated.View style={[s.fab, {
-        right: pad,
-        bottom: 80,
-        transform: [{ scale: fabAnim }],
-        opacity: fabAnim,
-      }]}>
+      {/* ── FAB ── */}
+      <Animated.View
+        style={[s.fab, {
+          right: pad,
+          bottom: 92,
+          transform: [{ scale: Animated.multiply(fabAnim, fabScale) }],
+          opacity: fabAnim,
+        }]}
+      >
+        <TouchableOpacity
+          onPressIn={fabPressIn}
+          onPressOut={fabPressOut}
+          onPress={() => navigation.navigate('AddExpense', { mode: 'add' })}
+          activeOpacity={1}
+          style={[s.fabBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
+        >
+          <MaterialIcons name="add" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
       </Animated.View>
     </View>
   );
@@ -274,91 +411,62 @@ const DashboardScreen = ({ navigation }) => {
 const s = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  scroll: { paddingTop: 4, paddingBottom: 20 },
-  stickyHdr: {
+  scroll: { paddingTop: 6, paddingBottom: 20 },
+
+  stickyBar: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
-    paddingTop: 52, paddingBottom: 10,
+    paddingTop: 52, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  stickyTitle: { fontSize: 18, fontWeight: '700' },
+  stickyTitle: { fontSize: 16, fontWeight: '700' },
 
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  greetWrap: { flex: 1, paddingHorizontal: 4 },
-  greetSub: { marginBottom: 1 },
-  greetName: { fontWeight: '800', letterSpacing: -0.3 },
-  avatarCircle: { borderWidth: 2, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  menuBtn: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  greetBlock: { flex: 1, paddingLeft: 2 },
+  greetSub:  { fontSize: 12, fontWeight: '400', marginBottom: 1 },
+  greetName: { fontSize: 21, fontWeight: '800', letterSpacing: -0.6 },
 
-  // Tarsi strip
-  tarsiStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: BorderRadius.xl,
-    borderWidth: 1,
-    padding: 12,
-    gap: 12,
-    overflow: 'hidden',
+  heroCard: {
+    borderRadius: 26, padding: 22, marginBottom: 16,
+    overflow: 'hidden', position: 'relative',
+    elevation: 10,
+    shadowOffset: { width: 0, height: 10 }, shadowRadius: 28, shadowOpacity: 0.28,
   },
-  tarsiImgWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    flexShrink: 0,
-  },
-  tarsiImg: { width: 72, height: 72, borderRadius: 36 },
-  tarsiContent: { flex: 1, gap: 4 },
-  tarsiName: { fontSize: 13, fontWeight: '700', letterSpacing: 0.2 },
-  tarsiMsg: { fontSize: 13, fontWeight: '400', lineHeight: 18 },
+  orb1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, top: -70, right: -50, backgroundColor: 'rgba(255,255,255,0.07)' },
+  orb2: { position: 'absolute', width: 130, height: 130, borderRadius: 65, bottom: -40, left: 10,  backgroundColor: 'rgba(255,255,255,0.04)' },
+  heroBody: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 22 },
+  heroRight: { alignItems: 'center' },
+  heroCaption: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: 'rgba(255,255,255,0.6)', marginBottom: 8 },
+  heroAmount: { fontSize: 38, fontWeight: '800', color: '#FFFFFF', letterSpacing: -1.5 },
+  heroSub: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 5 },
+  eyeBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
+  statsStrip: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 16, paddingVertical: 12 },
+  statItem: { flex: 1, alignItems: 'center', gap: 4 },
+  statBorder: { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: 'rgba(255,255,255,0.18)' },
+  statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statLabel: { fontSize: 10, color: 'rgba(255,255,255,0.55)', fontWeight: '500' },
+  statVal:   { fontSize: 13, color: '#FFFFFF', fontWeight: '800', letterSpacing: -0.3 },
 
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  sectionTitle: { fontSize: 16, fontWeight: '700' },
+  quickRow: { flexDirection: 'row', gap: 10 },
+  quickBtn: { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 18, borderWidth: 1, gap: 6, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4, shadowOpacity: 0.06 },
+  quickIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  quickLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.1 },
+
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionTitle: { fontSize: 17, fontWeight: '800', letterSpacing: -0.4 },
   seeAll: { fontSize: 12, fontWeight: '600' },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
 
-  catScroll: { paddingRight: 4, paddingBottom: Spacing.xl },
-  catChip: {
-    alignItems: 'flex-start',
-    padding: 12,
-    borderRadius: BorderRadius.xl,
-    borderWidth: 1,
-    gap: 4,
-  },
-  catChipIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  catChipName: { fontSize: 12, fontWeight: '600' },
-  catChipAmt: { fontSize: 14, fontWeight: '700' },
+  catCard: { width: 112, padding: 14, borderRadius: 22, borderWidth: 1, gap: 5, elevation: 2, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, shadowOpacity: 0.12 },
+  catIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  catName: { fontSize: 11, fontWeight: '600', letterSpacing: 0.1 },
+  catAmt:  { fontSize: 15, fontWeight: '800', letterSpacing: -0.4 },
 
-  dateRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginVertical: 6,
-  },
-  dateLabel: { fontSize: 12, fontWeight: '600' },
-  dateTotal: { fontSize: 12, fontWeight: '500' },
+  groupCard: { borderRadius: 20, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
+  groupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
+  groupDate:  { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  groupTotal: { fontSize: 13, fontWeight: '800' },
 
-  fab: { position: 'absolute' },
-  fabBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  fab: { position: 'absolute', zIndex: 99 },
+  fabBtn: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', elevation: 10, shadowOffset: { width: 0, height: 6 }, shadowRadius: 16, shadowOpacity: 0.38 },
 });
 
 export default DashboardScreen;
-

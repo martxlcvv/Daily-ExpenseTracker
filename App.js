@@ -4,115 +4,120 @@ import { ExpenseProvider, useExpenses } from './src/context/ExpenseContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import AppNavigator from './src/navigation/AppNavigator';
 
-// ── Spinner component (fixed: individual border colors avoid RN style-merge bug) ──
+// ── Spinner ──────────────────────────────────────────────────────────────────
 const Spinner = ({ size = 40, color = '#FFFFFF', trackOpacity = 0.18, strokeWidth = 3 }) => {
   const spin = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
-    spin.setValue(0);
-    Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: 900,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-    return () => spin.stopAnimation();
+    const loop = Animated.loop(
+      Animated.timing(spin, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true })
+    );
+    loop.start();
+    return () => loop.stop();
   }, []);
-
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-
+  const track = Math.round(trackOpacity * 255).toString(16).padStart(2, '0');
   return (
-    <Animated.View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        borderTopWidth: strokeWidth,
-        borderRightWidth: strokeWidth,
-        borderBottomWidth: strokeWidth,
-        borderLeftWidth: strokeWidth,
-        borderTopColor: color,
-        borderRightColor: color + Math.round(trackOpacity * 255).toString(16).padStart(2, '0'),
-        borderBottomColor: color + Math.round(trackOpacity * 255).toString(16).padStart(2, '0'),
-        borderLeftColor: color + Math.round(trackOpacity * 255).toString(16).padStart(2, '0'),
-        transform: [{ rotate }],
-      }}
-    />
+    <Animated.View style={{
+      width: size, height: size, borderRadius: size / 2,
+      borderTopWidth: strokeWidth, borderRightWidth: strokeWidth,
+      borderBottomWidth: strokeWidth, borderLeftWidth: strokeWidth,
+      borderTopColor: color,
+      borderRightColor: color + track, borderBottomColor: color + track, borderLeftColor: color + track,
+      transform: [{ rotate }],
+    }} />
   );
 };
 
-// ── Splash screen ─────────────────────────────────────────────────────────────
+// ── Splash ───────────────────────────────────────────────────────────────────
 function SplashView({ onDone }) {
-  const { isDark } = useTheme();
   const fade   = useRef(new Animated.Value(0)).current;
-  const scale  = useRef(new Animated.Value(0.82)).current;
-  const slideY = useRef(new Animated.Value(24)).current;
+  const scale  = useRef(new Animated.Value(0.8)).current;
+  const slideY = useRef(new Animated.Value(30)).current;
+  const glow   = useRef(new Animated.Value(0)).current;
   const { width } = useWindowDimensions();
 
-  const logoSize  = Math.min(width * 0.2, 88);
-  const titleSize = Math.min(width * 0.072, 28);
-
   useEffect(() => {
+    // Entrance
     Animated.parallel([
-      Animated.timing(fade,   { toValue: 1, duration: 600, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.spring(scale,  { toValue: 1, damping: 16, stiffness: 140, useNativeDriver: true }),
-      Animated.timing(slideY, { toValue: 0, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(fade,   { toValue: 1, duration: 700, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.spring(scale,  { toValue: 1, damping: 14, stiffness: 130, useNativeDriver: true }),
+      Animated.timing(slideY, { toValue: 0, duration: 600, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
 
-    const t = setTimeout(() => {
-      Animated.timing(fade, { toValue: 0, duration: 400, easing: Easing.in(Easing.cubic), useNativeDriver: true })
-        .start(() => onDone());
-    }, 2600);
+    // Glow pulse
+    Animated.loop(Animated.sequence([
+      Animated.timing(glow, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+      Animated.timing(glow, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+    ])).start();
 
+    // Exit after 2.8s
+    const t = setTimeout(() => {
+      Animated.timing(fade, { toValue: 0, duration: 450, easing: Easing.in(Easing.cubic), useNativeDriver: true })
+        .start(({ finished }) => { if (finished) onDone(); });
+    }, 2800);
     return () => clearTimeout(t);
   }, []);
 
-  const bg = isDark ? '#0D1117' : '#13091F';
+  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.22] });
+  const logoSize = Math.min(width * 0.22, 96);
 
   return (
-    <View style={[s.splash, { backgroundColor: bg }]}>
-      {/* Subtle radial glow */}
-      <View style={[s.glow, { backgroundColor: 'rgba(108,99,255,0.12)', width: width * 1.4, height: width * 1.4, borderRadius: width * 0.7 }]} />
+    <View style={s.splash}>
+      {/* Background */}
+      <View style={StyleSheet.absoluteFill}>
+        <View style={[s.bgGrad, { backgroundColor: '#0D1117' }]} />
+        <Animated.View style={[s.glowOrb, {
+          width: width * 1.6, height: width * 1.6,
+          borderRadius: width * 0.8, top: -width * 0.5, left: -width * 0.3,
+          backgroundColor: '#6C63FF', opacity: glowOpacity,
+        }]} />
+        <Animated.View style={[s.glowOrb, {
+          width: width * 1.0, height: width * 1.0,
+          borderRadius: width * 0.5, bottom: -width * 0.3, right: -width * 0.2,
+          backgroundColor: '#8B5CF6', opacity: glowOpacity,
+        }]} />
+      </View>
 
       <Animated.View style={[s.splashContent, { opacity: fade, transform: [{ scale }, { translateY: slideY }] }]}>
         {/* Logo */}
-        <View style={[s.logoCircle, { width: logoSize, height: logoSize, borderRadius: logoSize / 2 }]}>
-          <Text style={{ fontSize: logoSize * 0.5 }}>💰</Text>
+        <View style={[s.logoWrap, { width: logoSize, height: logoSize, borderRadius: logoSize / 2 }]}>
+          <Text style={{ fontSize: logoSize * 0.52 }}>💰</Text>
         </View>
 
-        {/* App name */}
-        <Text style={[s.splashTitle, { fontSize: titleSize }]}>Daily Ledger</Text>
-        <Text style={s.splashTagline}>Track smarter, spend wiser</Text>
+        {/* Tagline */}
+        <Text style={[s.splashTitle, { fontSize: Math.min(width * 0.075, 30) }]}>Daily Ledger</Text>
+        <Text style={s.splashTagline}>Mag-ipon tayo, 'wag palayas ng pera! 💸</Text>
 
-        {/* Spinner */}
-        <View style={{ marginTop: 40 }}>
-          <Spinner size={36} color="#6C63FF" trackOpacity={0.2} strokeWidth={3} />
+        <View style={{ marginTop: 36 }}>
+          <Spinner size={38} color="#6C63FF" trackOpacity={0.2} strokeWidth={3.5} />
         </View>
-
-        <Text style={s.splashVersion}>v1.0.0</Text>
+        <Text style={s.splashVersion}>v1.0.0 · Dark Theme</Text>
       </Animated.View>
     </View>
   );
 }
 
-// ── Loading overlay ────────────────────────────────────────────────────────────
+// ── Loading overlay ───────────────────────────────────────────────────────────
 function LoadingView() {
   const { colors } = useTheme();
-  const fade = useRef(new Animated.Value(0)).current;
-
+  const fade  = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.9)).current;
   useEffect(() => {
-    Animated.timing(fade, { toValue: 1, duration: 350, useNativeDriver: true }).start();
+    Animated.parallel([
+      Animated.timing(fade,  { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, damping: 16, stiffness: 140, useNativeDriver: true }),
+    ]).start();
   }, []);
-
   return (
     <View style={[s.loading, { backgroundColor: colors.background }]}>
-      <Animated.View style={[s.loadingInner, { opacity: fade }]}>
-        <Text style={{ fontSize: 40, marginBottom: 24 }}>💰</Text>
-        <Spinner size={38} color={colors.primary} trackOpacity={0.18} strokeWidth={3} />
+      <Animated.View style={[s.loadingInner, { opacity: fade, transform: [{ scale }] }]}>
+        <Text style={{ fontSize: 44, marginBottom: 24 }}>💰</Text>
+        <Spinner size={40} color={colors.primary} trackOpacity={0.18} strokeWidth={3} />
         <Text style={[s.loadingMsg, { color: colors.textSecondary }]}>
-          Loading your expenses…
+          Kino-load ang iyong expenses…
+        </Text>
+        <Text style={[s.loadingSubMsg, { color: colors.textTertiary }]}>
+          Sandali lang, bestie! 🙏
         </Text>
       </Animated.View>
     </View>
@@ -140,65 +145,21 @@ export default function App() {
 }
 
 const s = StyleSheet.create({
-  // Splash
-  splash: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  splash: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0D1117' },
+  bgGrad: { ...StyleSheet.absoluteFillObject },
+  glowOrb: { position: 'absolute' },
+  splashContent: { alignItems: 'center', gap: 10, paddingHorizontal: 32, zIndex: 10 },
+  logoWrap: {
+    backgroundColor: 'rgba(108,99,255,0.18)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 12, borderWidth: 1.5, borderColor: 'rgba(108,99,255,0.35)',
   },
-  glow: {
-    position: 'absolute',
-    top: '-20%',
-    left: '-20%',
-    opacity: 0.8,
-  },
-  splashContent: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  logoCircle: {
-    backgroundColor: 'rgba(108,99,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(108,99,255,0.25)',
-  },
-  splashTitle: {
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
-    marginTop: 4,
-  },
-  splashTagline: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.45)',
-    fontWeight: '400',
-    letterSpacing: 0.2,
-    marginTop: 2,
-  },
-  splashVersion: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.22)',
-    marginTop: 16,
-    letterSpacing: 0.5,
-  },
+  splashTitle: { fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5, marginTop: 4 },
+  splashTagline: { fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: '400', textAlign: 'center', marginTop: 2 },
+  splashVersion: { fontSize: 11, color: 'rgba(255,255,255,0.22)', marginTop: 18, letterSpacing: 0.5 },
 
-  // Loading
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingInner: {
-    alignItems: 'center',
-    gap: 0,
-  },
-  loadingMsg: {
-    fontSize: 13,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 20,
-    letterSpacing: 0.1,
-  },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loadingInner: { alignItems: 'center', gap: 0 },
+  loadingMsg: { fontSize: 14, fontWeight: '600', marginTop: 22, letterSpacing: 0.1, textAlign: 'center' },
+  loadingSubMsg: { fontSize: 12, marginTop: 6, textAlign: 'center' },
 });

@@ -1,13 +1,14 @@
 /**
- * DashboardScreen.js — Improved
- * Fixes: sidebar glitch (uses new Modal-based DrawerMenu), wallet edit shortcut,
- *        animated avatar with speaking bubble, smoother FAB
+ * DashboardScreen.js — Redesigned
+ * Features: Tagalog Gen-Z avatar, budget meter, animated stats,
+ *           glassmorphism cards, staggered entrance, drawer fixed
  */
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Easing,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -26,184 +27,254 @@ import { useTheme } from '../context/ThemeContext';
 import { getCategoryById } from '../utils/categories';
 import { formatCurrency, groupExpensesByDate } from '../utils/formatters';
 
-// ── Avatar messages cycling ───────────────────────────────────────────────────
+// ── Tagalog Gen-Z Avatar Messages ────────────────────────────────────────────
 const AVATAR_MESSAGES = [
-  'Hey! Track your spending 💪',
-  'Don\'t forget to log today\'s expenses!',
-  'You\'re doing great, keep it up!',
-  'Save a little every day 🌱',
-  'Check your Analytics tab!',
+  'Uy, huwag kalimutang mag-log ng gastos! 💀',
+  'Bestie, updated ka na ba sa budget mo? No cap 📊',
+  'Sana all may savings, ikaw na maging una! 🔥',
+  'Grabe, ang ganda ng swag mo pero kumusta wallet? 😭',
+  'Pag nag-ipon ka ngayon, flex mo bukas! 💪',
+  'Tara analytics check, seryoso 'to ha? 👀',
+  'Alam mo ba, ang pera na hindi sinusubaybayan ay pera na nawawala! 🤑',
+  'Lowkey proud sa 'yo pag nag-budget ka, ikaw? 🫶',
+  'Basta laban lang sa expenses, kaya natin 'to! ✨',
+  'Huwag impulse buy today, mag-invest na tayo! 🚀',
 ];
 
 // ── Staggered entrance wrapper ───────────────────────────────────────────────
 const FadeSlide = ({ children, delay = 0, style }) => {
-  const anim  = useRef(new Animated.Value(0)).current;
-  const slide = useRef(new Animated.Value(18)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(22)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(anim,  { toValue: 1, duration: 380, delay, useNativeDriver: true }),
-      Animated.timing(slide, { toValue: 0, duration: 340, delay, useNativeDriver: true }),
+      Animated.timing(opacity, {
+        toValue: 1, duration: 420, delay,
+        easing: Easing.out(Easing.cubic), useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0, duration: 380, delay,
+        easing: Easing.out(Easing.cubic), useNativeDriver: true,
+      }),
     ]).start();
   }, []);
   return (
-    <Animated.View style={[{ opacity: anim, transform: [{ translateY: slide }] }, style]}>
+    <Animated.View style={[{ opacity, transform: [{ translateY }] }, style]}>
       {children}
     </Animated.View>
   );
 };
 
-// ── Main ─────────────────────────────────────────────────────────────────────
+// ── Budget Progress Bar ───────────────────────────────────────────────────────
+const BudgetMeter = ({ spent, budget, currency }) => {
+  const { colors } = useTheme();
+  const anim = useRef(new Animated.Value(0)).current;
+  const pct  = budget > 0 ? Math.min(spent / budget, 1) : 0;
+
+  useEffect(() => {
+    Animated.timing(anim, { toValue: pct, duration: 1000, delay: 400, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+  }, [pct]);
+
+  const barColor = pct > 0.85 ? '#FF5252' : pct > 0.6 ? '#FFB347' : '#43D9AD';
+  const width = anim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+
+  return (
+    <View style={bm.wrap}>
+      <View style={bm.row}>
+        <Text style={[bm.label, { color: colors.textSecondary }]}>Monthly Budget</Text>
+        <Text style={[bm.pctText, { color: barColor }]}>{Math.round(pct * 100)}% used</Text>
+      </View>
+      <View style={[bm.track, { backgroundColor: colors.surfaceSecondary }]}>
+        <Animated.View style={[bm.fill, { width, backgroundColor: barColor }]} />
+      </View>
+      <View style={bm.row}>
+        <Text style={[bm.sub, { color: colors.textTertiary }]}>
+          {formatCurrency(spent, currency)} spent
+        </Text>
+        <Text style={[bm.sub, { color: colors.textTertiary }]}>
+          of {formatCurrency(budget, currency)}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+const bm = StyleSheet.create({
+  wrap: { marginTop: 14, gap: 6 },
+  row: { flexDirection: 'row', justifyContent: 'space-between' },
+  label: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3 },
+  pctText: { fontSize: 11, fontWeight: '700' },
+  track: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  fill: { height: '100%', borderRadius: 3 },
+  sub: { fontSize: 10 },
+});
+
+// ── Quick Stats Row ───────────────────────────────────────────────────────────
+const StatPill = ({ label, value, icon, color, delay }) => {
+  const { colors } = useTheme();
+  const scale = useRef(new Animated.Value(0.8)).current;
+  const fade  = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, delay, damping: 14, stiffness: 150, useNativeDriver: true }),
+      Animated.timing(fade,  { toValue: 1, duration: 350, delay, useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return (
+    <Animated.View style={{ opacity: fade, transform: [{ scale }], flex: 1 }}>
+      <View style={[sp.card, { backgroundColor: colors.card, borderColor: color + '25' }]}>
+        <View style={[sp.icon, { backgroundColor: color + '18' }]}>
+          <MaterialIcons name={icon} size={16} color={color} />
+        </View>
+        <Text style={[sp.val, { color: colors.text }]} numberOfLines={1}>{value}</Text>
+        <Text style={[sp.label, { color: colors.textTertiary }]}>{label}</Text>
+      </View>
+    </Animated.View>
+  );
+};
+
+const sp = StyleSheet.create({
+  card: { borderRadius: 16, padding: 12, borderWidth: 1, gap: 4, alignItems: 'flex-start' },
+  icon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  val: { fontSize: 14, fontWeight: '800', letterSpacing: -0.3 },
+  label: { fontSize: 10, fontWeight: '600', letterSpacing: 0.2 },
+});
+
+// ── Main Component ────────────────────────────────────────────────────────────
 const DashboardScreen = ({ navigation }) => {
   const { colors, isDark } = useTheme();
-  const { width }          = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const pad = width < 380 ? 16 : 20;
 
   const {
-    expenses, settings, todayTotal, weekTotal,
+    expenses, settings, todayTotal, weekTotal, monthTotal,
     currentBalance, toggleHideWallet, deleteExpense,
   } = useExpenses();
 
-  const [refreshing,    setRefreshing]    = useState(false);
-  const [drawerOpen,    setDrawerOpen]    = useState(false);
-  const [hideBalance,   setHideBalance]   = useState(settings.hideWallet || false);
-  const [avatarMsg,     setAvatarMsg]     = useState('');
-  const [isSpeaking,    setIsSpeaking]    = useState(false);
-  const [msgIndex,      setMsgIndex]      = useState(0);
+  const [refreshing,  setRefreshing]  = useState(false);
+  const [drawerOpen,  setDrawerOpen]  = useState(false);
+  const [hideBalance, setHideBalance] = useState(settings.hideWallet || false);
+  const [avatarMsg,   setAvatarMsg]   = useState('');
+  const [isSpeaking,  setIsSpeaking]  = useState(false);
+  const [msgIdx,      setMsgIdx]      = useState(0);
 
   const fabAnim  = useRef(new Animated.Value(0)).current;
   const fabScale = useRef(new Animated.Value(1)).current;
   const scrollY  = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // Avatar speaking cycle — fires after mount
+  // FAB entrance + pulse
   useEffect(() => {
-    Animated.spring(fabAnim, {
-      toValue: 1, delay: 600,
-      useNativeDriver: true, damping: 14, stiffness: 120,
-    }).start();
+    Animated.spring(fabAnim, { toValue: 1, delay: 700, useNativeDriver: true, damping: 12, stiffness: 110 }).start();
 
-    const speakCycle = () => {
-      setMsgIndex((i) => {
+    Animated.loop(Animated.sequence([
+      Animated.timing(pulseAnim, { toValue: 1.06, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ])).start();
+  }, []);
+
+  // Avatar speaking cycle with Tagalog Gen-Z messages
+  useEffect(() => {
+    const speak = () => {
+      setMsgIdx((i) => {
         const next = (i + 1) % AVATAR_MESSAGES.length;
         setAvatarMsg(AVATAR_MESSAGES[next]);
         setIsSpeaking(true);
-        setTimeout(() => { setIsSpeaking(false); setAvatarMsg(''); }, 3800);
+        setTimeout(() => { setIsSpeaking(false); setAvatarMsg(''); }, 4000);
         return next;
       });
     };
-
-    // First message after 1.5s
-    const t1 = setTimeout(speakCycle, 1500);
-    // Then repeat every 12s
-    const interval = setInterval(speakCycle, 12000);
+    const t1 = setTimeout(speak, 1800);
+    const interval = setInterval(speak, 13000);
     return () => { clearTimeout(t1); clearInterval(interval); };
   }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 700);
+    setTimeout(() => setRefreshing(false), 600);
   }, []);
 
-  const openDrawer  = useCallback(() => setDrawerOpen(true),  []);
-  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
-
-  const toggleBalance = () => {
+  const toggleBalance = useCallback(() => {
     setHideBalance((v) => !v);
     toggleHideWallet?.();
-  };
+  }, [toggleHideWallet]);
 
-  const fabPressIn  = () => Animated.spring(fabScale, { toValue: 0.88, useNativeDriver: true, speed: 40 }).start();
+  const fabPressIn  = () => Animated.spring(fabScale, { toValue: 0.87, useNativeDriver: true, speed: 40 }).start();
   const fabPressOut = () => Animated.spring(fabScale, { toValue: 1,    useNativeDriver: true, speed: 20 }).start();
 
-  const recentGroups   = groupExpensesByDate(expenses.slice(0, 20));
-  const categoryTotals = expenses.reduce((acc, e) => {
-    acc[e.category] = (acc[e.category] || 0) + e.amount;
-    return acc;
-  }, {});
-  const topCategories = Object.entries(categoryTotals)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5)
-    .map(([id, total]) => ({ ...getCategoryById(id), total }));
+  // Derived data
+  const recentGroups = useMemo(() => groupExpensesByDate(expenses.slice(0, 25)), [expenses]);
+  const topCategories = useMemo(() => {
+    const totals = expenses.reduce((acc, e) => {
+      acc[e.category] = (acc[e.category] || 0) + e.amount;
+      return acc;
+    }, {});
+    return Object.entries(totals)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([id, total]) => ({ ...getCategoryById(id), total }));
+  }, [expenses]);
 
-  const greetHour  = new Date().getHours();
-  const greetLabel = greetHour < 5 ? 'Good night' : greetHour < 12 ? 'Good morning' : greetHour < 17 ? 'Good afternoon' : 'Good evening';
-  const greetEmoji = greetHour < 5 ? '🌙' : greetHour < 12 ? '☀️' : greetHour < 17 ? '🌤️' : '🌙';
-
-  const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 50], outputRange: [0, 1], extrapolate: 'clamp',
-  });
+  const h = new Date().getHours();
+  const greetLabel = h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const greetEmoji = h < 5 ? '🌙' : h < 12 ? '🌅' : h < 17 ? '☀️' : '🌙';
 
   const currency  = settings.currency  || 'PHP';
-  const firstName = settings.firstName || 'User';
+  const firstName = settings.firstName || 'Bestie';
+  const budget    = settings.monthlyBudget || 15000;
 
-  const heroGradient = isDark
-    ? ['#141830', '#1E2548', '#141830']
-    : ['#6C63FF', '#8A7FFF', '#5A52E0'];
+  const scrollHeaderOpacity = scrollY.interpolate({ inputRange: [0, 60], outputRange: [0, 1], extrapolate: 'clamp' });
+
+  const heroColors = isDark
+    ? ['#1A1040', '#2D1B69', '#1A1040']
+    : ['#6B46C1', '#8B5CF6', '#6B46C1'];
 
   return (
     <View style={[s.root, { backgroundColor: colors.background }]}>
-      {/*
-        DrawerMenu is now a Modal — renders outside this tree,
-        so it NEVER causes layout resets when opened/closed.
-      */}
-      <DrawerMenu visible={drawerOpen} onClose={closeDrawer} navigation={navigation} />
+      <DrawerMenu visible={drawerOpen} onClose={() => setDrawerOpen(false)} navigation={navigation} />
 
-      {/* Scroll-reveal sticky bar */}
-      <Animated.View
-        pointerEvents="none"
-        style={[s.stickyBar, {
-          opacity: headerOpacity,
-          backgroundColor: colors.background,
-          borderBottomColor: colors.separator,
-          paddingHorizontal: pad,
-        }]}
-      >
-        <Text style={[s.stickyTitle, { color: colors.text }]}>Dashboard</Text>
+      {/* Scroll-reveal sticky header */}
+      <Animated.View pointerEvents="none" style={[s.stickyBar, {
+        opacity: scrollHeaderOpacity,
+        backgroundColor: colors.background + 'EE',
+        borderBottomColor: colors.separator,
+        paddingHorizontal: pad,
+      }]}>
+        <Text style={[s.stickyTitle, { color: colors.text }]}>Dashboard 💰</Text>
       </Animated.View>
 
       <SafeAreaView style={s.safe} edges={['top']}>
         <Animated.ScrollView
           contentContainerStyle={[s.scroll, { paddingHorizontal: pad }]}
           showsVerticalScrollIndicator={false}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: false }
-          )}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
           scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-              colors={[colors.primary]}
+              refreshing={refreshing} onRefresh={onRefresh}
+              tintColor={colors.primary} colors={[colors.primary]}
             />
           }
         >
-          {/* ── Top row ── */}
+          {/* ── Top row ──────────────────────────────────────── */}
           <FadeSlide delay={0}>
-            <View style={[s.topRow, { marginBottom: 22 }]}>
+            <View style={[s.topRow, { marginBottom: 20 }]}>
               <TouchableOpacity
-                onPress={openDrawer}
+                onPress={() => setDrawerOpen(true)}
                 style={[s.menuBtn, { backgroundColor: colors.surfaceSecondary }]}
                 activeOpacity={0.75}
               >
-                <MaterialIcons name="menu" size={20} color={colors.text} />
+                <MaterialIcons name="menu" size={21} color={colors.text} />
               </TouchableOpacity>
 
               <View style={s.greetBlock}>
-                <Text style={[s.greetSub, { color: colors.textSecondary }]}>
-                  {greetLabel} {greetEmoji}
-                </Text>
+                <Text style={[s.greetSub, { color: colors.textSecondary }]}>{greetLabel} {greetEmoji}</Text>
                 <Text style={[s.greetName, { color: colors.text }]} numberOfLines={1}>
-                  {firstName}
+                  {firstName}! 👋
                 </Text>
               </View>
 
-              {/* Avatar — navigates to Settings on press */}
-              <TouchableOpacity
-                onPress={() => navigation.navigate('Settings')}
-                activeOpacity={0.88}
-              >
+              <TouchableOpacity onPress={() => navigation.navigate('Settings')} activeOpacity={0.85}>
                 <UserAvatar
                   size="sm"
                   message={avatarMsg}
@@ -214,42 +285,31 @@ const DashboardScreen = ({ navigation }) => {
             </View>
           </FadeSlide>
 
-          {/* ── Hero balance card ── */}
+          {/* ── Hero Balance Card ─────────────────────────── */}
           <FadeSlide delay={60}>
-            <LinearGradient
-              colors={heroGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={s.heroCard}
-            >
-              <View style={s.orb1} />
-              <View style={s.orb2} />
+            <LinearGradient colors={heroColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.heroCard}>
+              {/* Decorative orbs */}
+              <View style={s.orb1} /><View style={s.orb2} /><View style={s.orb3} />
 
-              <View style={s.heroBody}>
+              <View style={s.heroTop}>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.heroCaption}>WALLET BALANCE</Text>
-                  <Text style={s.heroAmount} numberOfLines={1}>
-                    {hideBalance ? '• • • • • •' : formatCurrency(currentBalance, currency)}
+                  <Text style={s.heroCaption}>💳  WALLET BALANCE</Text>
+                  <Text style={s.heroAmount} numberOfLines={1} adjustsFontSizeToFit>
+                    {hideBalance ? '•  •  •  •  •  •' : formatCurrency(currentBalance, currency)}
                   </Text>
                   <Text style={s.heroSub}>
-                    {expenses.length} expense{expenses.length !== 1 ? 's' : ''} total
+                    {expenses.length} expense{expenses.length !== 1 ? 's' : ''} recorded
                   </Text>
                 </View>
-                <View style={s.heroRight}>
-                  <TouchableOpacity onPress={toggleBalance} style={s.eyeBtn} activeOpacity={0.8}>
+                <View style={s.heroActions}>
+                  <TouchableOpacity onPress={toggleBalance} style={s.heroBtn} activeOpacity={0.8}>
                     <MaterialIcons
                       name={hideBalance ? 'visibility-off' : 'visibility'}
-                      size={19}
-                      color="rgba(255,255,255,0.7)"
+                      size={18} color="rgba(255,255,255,0.75)"
                     />
                   </TouchableOpacity>
-                  {/* Wallet edit shortcut */}
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate('Settings')}
-                    style={[s.eyeBtn, { marginTop: 6 }]}
-                    activeOpacity={0.8}
-                  >
-                    <MaterialIcons name="edit" size={17} color="rgba(255,255,255,0.55)" />
+                  <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={[s.heroBtn, { marginTop: 6 }]} activeOpacity={0.8}>
+                    <MaterialIcons name="edit" size={16} color="rgba(255,255,255,0.5)" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -257,39 +317,58 @@ const DashboardScreen = ({ navigation }) => {
               {/* Stats strip */}
               <View style={s.statsStrip}>
                 {[
-                  { icon: 'today',      label: 'Today',     val: hideBalance ? '••••' : formatCurrency(todayTotal, currency),  tint: '#FF6B6B' },
-                  { icon: 'date-range', label: 'This Week', val: hideBalance ? '••••' : formatCurrency(weekTotal, currency),   tint: '#43D9AD' },
-                  { icon: 'receipt',    label: 'Entries',   val: String(expenses.length),                                      tint: '#F7B731' },
+                  { icon: 'today',      label: 'Today',      val: formatCurrency(todayTotal, currency),  tint: '#FF6B6B' },
+                  { icon: 'date-range', label: 'This Week',  val: formatCurrency(weekTotal, currency),   tint: '#43D9AD' },
+                  { icon: 'calendar-month', label: 'Month',  val: formatCurrency(monthTotal, currency),  tint: '#FFB347' },
                 ].map((st, i) => (
                   <View key={st.label} style={[s.statItem, i < 2 && s.statBorder]}>
                     <View style={s.statIconRow}>
-                      <MaterialIcons name={st.icon} size={11} color={st.tint} />
+                      <MaterialIcons name={st.icon} size={10} color={st.tint} />
                       <Text style={s.statLabel}>{st.label}</Text>
                     </View>
-                    <Text style={s.statVal} numberOfLines={1}>{st.val}</Text>
+                    <Text style={s.statVal} numberOfLines={1}>
+                      {hideBalance ? '••••' : st.val}
+                    </Text>
                   </View>
                 ))}
               </View>
+
+              {/* Budget meter */}
+              <BudgetMeter spent={monthTotal} budget={budget} currency={currency} />
             </LinearGradient>
           </FadeSlide>
 
-          {/* ── Quick action row ── */}
+          {/* ── Quick Stats Pills ──────────────────────────── */}
           <FadeSlide delay={120}>
+            <View style={[s.statPillsRow, { marginBottom: 22 }]}>
+              <StatPill label="Entries" value={String(expenses.length)} icon="receipt-long" color="#6C63FF" delay={0} />
+              <StatPill label="Categories" value={String(new Set(expenses.map(e => e.category)).size)} icon="category" color="#43D9AD" delay={60} />
+              <StatPill label="This Week" value={String(expenses.filter(e => {
+                const d = new Date(e.date);
+                const now = new Date();
+                const diff = (now - d) / (1000 * 60 * 60 * 24);
+                return diff <= 7;
+              }).length)} icon="trending-up" color="#FFB347" delay={120} />
+            </View>
+          </FadeSlide>
+
+          {/* ── Quick Actions ──────────────────────────────── */}
+          <FadeSlide delay={180}>
             <View style={[s.quickRow, { marginBottom: 26 }]}>
               {[
-                { icon: 'add',        label: 'Add',       color: '#6C63FF', onPress: () => navigation.navigate('AddExpense', { mode: 'add' }) },
-                { icon: 'search',     label: 'Search',    color: '#43D9AD', onPress: () => navigation.navigate('Search') },
-                { icon: 'insights',   label: 'Analytics', color: '#FF8C42', onPress: () => navigation.navigate('Home', { screen: 'Analytics' }) },
-                { icon: 'event-note', label: 'Planned',   color: '#F7B731', onPress: () => navigation.navigate('PlannedPayments') },
+                { icon: 'add-circle',  label: 'Add',       color: '#6C63FF', onPress: () => navigation.navigate('AddExpense', { mode: 'add' }) },
+                { icon: 'search',      label: 'Search',    color: '#43D9AD', onPress: () => navigation.navigate('Search') },
+                { icon: 'insights',    label: 'Analytics', color: '#FF8C42', onPress: () => navigation.navigate('Home', { screen: 'Analytics' }) },
+                { icon: 'shopping-cart', label: 'Shopping', color: '#F7B731', onPress: () => navigation.navigate('ShoppingList') },
               ].map((q) => (
                 <TouchableOpacity
                   key={q.label}
                   onPress={q.onPress}
                   activeOpacity={0.78}
-                  style={[s.quickBtn, { backgroundColor: colors.card, borderColor: q.color + '22' }]}
+                  style={[s.quickBtn, { backgroundColor: colors.card, borderColor: q.color + '30' }]}
                 >
-                  <View style={[s.quickIcon, { backgroundColor: q.color + '16' }]}>
-                    <MaterialIcons name={q.icon} size={20} color={q.color} />
+                  <View style={[s.quickIcon, { backgroundColor: q.color + '18' }]}>
+                    <MaterialIcons name={q.icon} size={22} color={q.color} />
                   </View>
                   <Text style={[s.quickLabel, { color: colors.textSecondary }]}>{q.label}</Text>
                 </TouchableOpacity>
@@ -297,51 +376,49 @@ const DashboardScreen = ({ navigation }) => {
             </View>
           </FadeSlide>
 
-          {/* ── Top categories ── */}
+          {/* ── Top Categories ─────────────────────────────── */}
           {topCategories.length > 0 && (
-            <FadeSlide delay={180}>
+            <FadeSlide delay={220}>
               <View style={s.sectionRow}>
-                <Text style={[s.sectionTitle, { color: colors.text }]}>Top Categories</Text>
+                <Text style={[s.sectionTitle, { color: colors.text }]}>🏆 Top Gastos</Text>
                 <TouchableOpacity onPress={() => navigation.navigate('Home', { screen: 'Analytics' })}>
-                  <Text style={[s.seeAll, { color: colors.primary }]}>See all →</Text>
+                  <Text style={[s.seeAll, { color: colors.primary }]}>Tingnan lahat →</Text>
                 </TouchableOpacity>
               </View>
               <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 10, paddingRight: 4, paddingBottom: 22 }}
+                horizontal showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 10, paddingRight: 4, paddingBottom: 24 }}
                 keyboardShouldPersistTaps="handled"
               >
-                {topCategories.map((cat) => (
-                  <View
-                    key={cat.id}
-                    style={[s.catCard, {
-                      backgroundColor: colors.card,
-                      borderColor: cat.color + '25',
-                      shadowColor: cat.color,
-                    }]}
-                  >
-                    <View style={[s.catIcon, { backgroundColor: cat.color + '18' }]}>
-                      <MaterialIcons name={cat.icon} size={20} color={cat.color} />
+                {topCategories.map((cat, i) => (
+                  <FadeSlide key={cat.id} delay={240 + i * 40}>
+                    <View style={[s.catCard, { backgroundColor: colors.card, borderColor: cat.color + '28', shadowColor: cat.color }]}>
+                      <View style={[s.catIcon, { backgroundColor: cat.color + '20' }]}>
+                        <MaterialIcons name={cat.icon} size={20} color={cat.color} />
+                      </View>
+                      <Text style={[s.catName, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {cat.name.split(' ')[0]}
+                      </Text>
+                      <Text style={[s.catAmt, { color: colors.text }]} numberOfLines={1}>
+                        {formatCurrency(cat.total, currency)}
+                      </Text>
+                      {/* mini bar */}
+                      <View style={[s.catMiniBar, { backgroundColor: cat.color + '18' }]}>
+                        <View style={[s.catMiniBarFill, { backgroundColor: cat.color, width: '70%' }]} />
+                      </View>
                     </View>
-                    <Text style={[s.catName, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {cat.name.split(' ')[0]}
-                    </Text>
-                    <Text style={[s.catAmt, { color: colors.text }]} numberOfLines={1}>
-                      {formatCurrency(cat.total, currency)}
-                    </Text>
-                  </View>
+                  </FadeSlide>
                 ))}
               </ScrollView>
             </FadeSlide>
           )}
 
-          {/* ── Recent expenses ── */}
-          <FadeSlide delay={220}>
+          {/* ── Recent Expenses ────────────────────────────── */}
+          <FadeSlide delay={260}>
             <View style={s.sectionRow}>
-              <Text style={[s.sectionTitle, { color: colors.text }]}>Recent</Text>
+              <Text style={[s.sectionTitle, { color: colors.text }]}>🕒 Recent</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Home', { screen: 'Expenses' })}>
-                <Text style={[s.seeAll, { color: colors.primary }]}>See all →</Text>
+                <Text style={[s.seeAll, { color: colors.primary }]}>Lahat →</Text>
               </TouchableOpacity>
             </View>
           </FadeSlide>
@@ -349,16 +426,13 @@ const DashboardScreen = ({ navigation }) => {
           {recentGroups.length === 0 ? (
             <EmptyState
               icon="receipt-long"
-              title="No expenses yet"
-              subtitle="Tap + to log your first expense"
+              title="Wala pang gastos! 🎉"
+              subtitle="I-tap ang + para mag-add ng expense"
             />
           ) : (
             recentGroups.slice(0, 3).map((group, gi) => (
-              <FadeSlide key={group.date} delay={240 + gi * 50}>
-                <View style={[s.groupCard, {
-                  backgroundColor: colors.card,
-                  borderColor: colors.separator,
-                }]}>
+              <FadeSlide key={group.date} delay={280 + gi * 55}>
+                <View style={[s.groupCard, { backgroundColor: colors.card, borderColor: colors.separator }]}>
                   <View style={[s.groupHeader, { borderBottomColor: colors.separator }]}>
                     <Text style={[s.groupDate, { color: colors.textSecondary }]}>
                       {group.displayDate.toUpperCase()}
@@ -381,19 +455,41 @@ const DashboardScreen = ({ navigation }) => {
             ))
           )}
 
-          <View style={{ height: 110 }} />
+          {/* Planned payments reminder */}
+          {(settings.plannedPayments || []).length > 0 && (
+            <FadeSlide delay={360}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('PlannedPayments')}
+                activeOpacity={0.85}
+                style={[s.reminderCard, { backgroundColor: colors.card, borderColor: '#F7B731' + '40' }]}
+              >
+                <View style={[s.reminderIcon, { backgroundColor: '#F7B73120' }]}>
+                  <MaterialIcons name="event-note" size={20} color="#F7B731" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.reminderTitle, { color: colors.text }]}>May Planned Payments! 📅</Text>
+                  <Text style={[s.reminderSub, { color: colors.textSecondary }]}>
+                    {settings.plannedPayments.length} upcoming payment{settings.plannedPayments.length !== 1 ? 's' : ''} · I-check mo na!
+                  </Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={20} color={colors.textTertiary} />
+              </TouchableOpacity>
+            </FadeSlide>
+          )}
+
+          <View style={{ height: 120 }} />
         </Animated.ScrollView>
       </SafeAreaView>
 
-      {/* ── FAB ── */}
-      <Animated.View
-        style={[s.fab, {
-          right: pad,
-          bottom: 92,
-          transform: [{ scale: Animated.multiply(fabAnim, fabScale) }],
-          opacity: fabAnim,
-        }]}
-      >
+      {/* ── FAB ─────────────────────────────────────────────── */}
+      <Animated.View style={[s.fab, {
+        right: pad, bottom: 92,
+        transform: [
+          { scale: Animated.multiply(fabAnim, fabScale) },
+          { scale: pulseAnim },
+        ],
+        opacity: fabAnim,
+      }]}>
         <TouchableOpacity
           onPressIn={fabPressIn}
           onPressOut={fabPressOut}
@@ -401,8 +497,13 @@ const DashboardScreen = ({ navigation }) => {
           activeOpacity={1}
           style={[s.fabBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
         >
-          <MaterialIcons name="add" size={28} color="#FFFFFF" />
+          <MaterialIcons name="add" size={30} color="#FFFFFF" />
         </TouchableOpacity>
+        {/* Ripple ring */}
+        <Animated.View style={[s.fabRipple, {
+          borderColor: colors.primary + '40',
+          transform: [{ scale: pulseAnim }],
+        }]} />
       </Animated.View>
     </View>
   );
@@ -415,58 +516,77 @@ const s = StyleSheet.create({
 
   stickyBar: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
-    paddingTop: 52, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingTop: 54, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth,
   },
   stickyTitle: { fontSize: 16, fontWeight: '700' },
 
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  menuBtn: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  menuBtn: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   greetBlock: { flex: 1, paddingLeft: 2 },
   greetSub:  { fontSize: 12, fontWeight: '400', marginBottom: 1 },
-  greetName: { fontSize: 21, fontWeight: '800', letterSpacing: -0.6 },
+  greetName: { fontSize: 22, fontWeight: '800', letterSpacing: -0.7 },
 
+  // Hero card
   heroCard: {
-    borderRadius: 26, padding: 22, marginBottom: 16,
-    overflow: 'hidden', position: 'relative',
-    elevation: 10,
-    shadowOffset: { width: 0, height: 10 }, shadowRadius: 28, shadowOpacity: 0.28,
+    borderRadius: 28, padding: 22, marginBottom: 16,
+    overflow: 'hidden', elevation: 12,
+    shadowOffset: { width: 0, height: 12 }, shadowRadius: 30, shadowOpacity: 0.3,
   },
-  orb1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, top: -70, right: -50, backgroundColor: 'rgba(255,255,255,0.07)' },
-  orb2: { position: 'absolute', width: 130, height: 130, borderRadius: 65, bottom: -40, left: 10,  backgroundColor: 'rgba(255,255,255,0.04)' },
-  heroBody: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 22 },
-  heroRight: { alignItems: 'center' },
-  heroCaption: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: 'rgba(255,255,255,0.6)', marginBottom: 8 },
-  heroAmount: { fontSize: 38, fontWeight: '800', color: '#FFFFFF', letterSpacing: -1.5 },
-  heroSub: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 5 },
-  eyeBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
-  statsStrip: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 16, paddingVertical: 12 },
-  statItem: { flex: 1, alignItems: 'center', gap: 4 },
-  statBorder: { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: 'rgba(255,255,255,0.18)' },
-  statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statLabel: { fontSize: 10, color: 'rgba(255,255,255,0.55)', fontWeight: '500' },
-  statVal:   { fontSize: 13, color: '#FFFFFF', fontWeight: '800', letterSpacing: -0.3 },
+  orb1: { position: 'absolute', width: 220, height: 220, borderRadius: 110, top: -80, right: -50, backgroundColor: 'rgba(255,255,255,0.06)' },
+  orb2: { position: 'absolute', width: 140, height: 140, borderRadius: 70, bottom: -40, left: 10, backgroundColor: 'rgba(255,255,255,0.04)' },
+  orb3: { position: 'absolute', width: 70, height: 70, borderRadius: 35, top: 20, right: 100, backgroundColor: 'rgba(255,255,255,0.03)' },
 
+  heroTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
+  heroActions: { alignItems: 'center' },
+  heroCaption: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: 'rgba(255,255,255,0.55)', marginBottom: 8 },
+  heroAmount: { fontSize: 36, fontWeight: '800', color: '#FFFFFF', letterSpacing: -1.5, marginBottom: 4 },
+  heroSub: { fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+  heroBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.13)', alignItems: 'center', justifyContent: 'center' },
+
+  statsStrip: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.22)', borderRadius: 18, paddingVertical: 13 },
+  statItem: { flex: 1, alignItems: 'center', gap: 5 },
+  statBorder: { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: 'rgba(255,255,255,0.15)' },
+  statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statLabel: { fontSize: 9, color: 'rgba(255,255,255,0.5)', fontWeight: '600', letterSpacing: 0.3 },
+  statVal: { fontSize: 13, color: '#FFFFFF', fontWeight: '800', letterSpacing: -0.3 },
+
+  // Stat pills
+  statPillsRow: { flexDirection: 'row', gap: 10 },
+
+  // Quick actions
   quickRow: { flexDirection: 'row', gap: 10 },
-  quickBtn: { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 18, borderWidth: 1, gap: 6, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4, shadowOpacity: 0.06 },
-  quickIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  quickLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.1 },
+  quickBtn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 20, borderWidth: 1, gap: 7, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, shadowOpacity: 0.07 },
+  quickIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  quickLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
 
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontSize: 17, fontWeight: '800', letterSpacing: -0.4 },
-  seeAll: { fontSize: 12, fontWeight: '600' },
+  seeAll: { fontSize: 12, fontWeight: '700' },
 
-  catCard: { width: 112, padding: 14, borderRadius: 22, borderWidth: 1, gap: 5, elevation: 2, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, shadowOpacity: 0.12 },
-  catIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  // Category cards
+  catCard: { width: 118, padding: 14, borderRadius: 22, borderWidth: 1, gap: 5, elevation: 3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.14 },
+  catIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   catName: { fontSize: 11, fontWeight: '600', letterSpacing: 0.1 },
   catAmt:  { fontSize: 15, fontWeight: '800', letterSpacing: -0.4 },
+  catMiniBar: { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 4 },
+  catMiniBarFill: { height: '100%', borderRadius: 2 },
 
-  groupCard: { borderRadius: 20, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
-  groupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth },
-  groupDate:  { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  // Expense groups
+  groupCard: { borderRadius: 22, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
+  groupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  groupDate:  { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   groupTotal: { fontSize: 13, fontWeight: '800' },
 
+  // Reminder card
+  reminderCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 18, borderWidth: 1, marginBottom: 14, gap: 12, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, shadowOpacity: 0.06 },
+  reminderIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  reminderTitle: { fontSize: 13, fontWeight: '700' },
+  reminderSub: { fontSize: 11, marginTop: 2 },
+
+  // FAB
   fab: { position: 'absolute', zIndex: 99 },
-  fabBtn: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', elevation: 10, shadowOffset: { width: 0, height: 6 }, shadowRadius: 16, shadowOpacity: 0.38 },
+  fabBtn: { width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center', elevation: 12, shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, shadowOpacity: 0.45 },
+  fabRipple: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 2, top: -9, left: -9 },
 });
 
 export default DashboardScreen;

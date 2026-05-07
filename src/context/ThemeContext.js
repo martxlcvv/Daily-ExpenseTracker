@@ -1,20 +1,23 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { useColorScheme } from 'react-native';
 import { getSettings, updateSetting } from '../services/StorageService';
 import { Colors } from '../theme/colors';
 
 const ThemeContext = createContext(null);
 
 export const ThemeProvider = ({ children }) => {
-  const systemScheme = useColorScheme();
-  const [isDark, setIsDark] = useState(true);
-  const [loaded, setLoaded] = useState(false);
+  const [isDark, setIsDark]   = useState(true);
+  const [loaded, setLoaded]   = useState(false);
 
   useEffect(() => {
     (async () => {
-      const settings = await getSettings();
-      setIsDark(settings.darkMode ?? true);
-      setLoaded(true);
+      try {
+        const settings = await getSettings();
+        setIsDark(settings.darkMode ?? true);
+      } catch (e) {
+        // keep default dark
+      } finally {
+        setLoaded(true);
+      }
     })();
   }, []);
 
@@ -34,7 +37,7 @@ export const ThemeProvider = ({ children }) => {
 };
 
 export const useTheme = () => {
-  const context = useContext(ThemeContext);
-  if (!context) throw new Error('useTheme must be used within ThemeProvider');
-  return context;
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error('useTheme must be used within ThemeProvider');
+  return ctx;
 };

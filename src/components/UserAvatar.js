@@ -3,13 +3,13 @@
  */
 import { useEffect, useRef } from 'react';
 import {
-  Animated,
-  Easing,
-  Image,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
+    Animated,
+    Easing,
+    Image,
+    StyleSheet,
+    Text,
+    View,
+    useWindowDimensions,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 
@@ -118,10 +118,12 @@ const UserAvatar = ({ size = 'md', message = '', showBubble = true, isSpeaking =
   return (
     <View style={styles.wrapper}>
       {/* Pulsing outer ring */}
-      <Animated.View style={[styles.outerRing, {
-        width: ringSize + 10, height: ringSize + 10, borderRadius: (ringSize + 10) / 2,
-        borderColor: ringBorderColor, transform: [{ scale: pulseAnim }],
-      }]} />
+      <Animated.View style={[styles.outerRingWrapper, { transform: [{ scale: pulseAnim }] }]}> 
+        <Animated.View style={[styles.outerRing, {
+          width: ringSize + 10, height: ringSize + 10, borderRadius: (ringSize + 10) / 2,
+          borderColor: ringBorderColor,
+        }]} />
+      </Animated.View>
 
       {/* Main ring */}
       <View style={[styles.ring, {
@@ -154,6 +156,7 @@ const UserAvatar = ({ size = 'md', message = '', showBubble = true, isSpeaking =
 
 const styles = StyleSheet.create({
   wrapper: { alignItems: 'center', gap: 10 },
+  outerRingWrapper: { position: 'absolute' },
   outerRing: { position: 'absolute', borderWidth: 2, borderStyle: 'dashed' },
   ring: {
     alignItems: 'center', justifyContent: 'center', borderWidth: 2,

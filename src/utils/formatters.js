@@ -73,26 +73,47 @@ export const getDateRanges = () => {
 
 export const filterExpensesByDateRange = (expenses, start, end) => {
   return expenses.filter((expense) => {
-    const date = parseISO(expense.date);
-    return date >= start && date <= end;
+    try {
+      const date = parseISO(expense.date);
+      return date >= start && date <= end;
+    } catch (e) {
+      console.error('Invalid date in expense:', expense);
+      return false;
+    }
   });
 };
 
 export const groupExpensesByDate = (expenses) => {
   const groups = {};
   expenses.forEach((expense) => {
-    const dateKey = expense.date.split('T')[0];
-    if (!groups[dateKey]) groups[dateKey] = [];
-    groups[dateKey].push(expense);
+    try {
+      const dateKey = expense.date.split('T')[0];
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(expense);
+    } catch (e) {
+      console.error('Invalid expense date:', expense);
+    }
   });
 
   return Object.entries(groups)
-    .sort(([a], [b]) => new Date(b) - new Date(a))
+    .sort(([a], [b]) => {
+      try {
+        return new Date(b) - new Date(a);
+      } catch (e) {
+        return 0;
+      }
+    })
     .map(([date, items]) => ({
       date,
       displayDate: formatDate(date),
       total: items.reduce((sum, item) => sum + item.amount, 0),
-      items: items.sort((a, b) => new Date(b.date) - new Date(a.date)),
+      items: items.sort((a, b) => {
+        try {
+          return new Date(b.date) - new Date(a.date);
+        } catch (e) {
+          return 0;
+        }
+      }),
     }));
 };
 

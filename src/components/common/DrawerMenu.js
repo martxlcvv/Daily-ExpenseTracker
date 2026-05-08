@@ -28,8 +28,11 @@ const MENU_ITEMS = [
   { icon: 'receipt-long',       label: 'Expenses',         screen: 'Expenses',        tab: true  },
   { icon: 'insights',           label: 'Analytics',        screen: 'Analytics',       tab: true  },
   { icon: 'search',             label: 'Search',           screen: 'Search',          tab: true  },
+  { icon: 'trending-up',        label: 'Investments',      screen: 'Investment',      tab: false },
+  { icon: 'bar-chart',          label: 'Statistics',       screen: 'Statistics',      tab: false },
   { icon: 'shopping-cart',      label: 'Shopping List',    screen: 'ShoppingList',    tab: false },
   { icon: 'event-note',         label: 'Planned Payments', screen: 'PlannedPayments', tab: false },
+  { icon: 'account-balance',    label: 'Bank Accounts',    screen: 'BankAccounts',    tab: false },
   { icon: 'history',            label: 'Delete History',   screen: 'DeleteHistory',   tab: false },
   { icon: 'settings',           label: 'Settings',         screen: 'Settings',        tab: false },
 ];
@@ -90,6 +93,7 @@ export default function DrawerMenu({ visible, onClose, navigation }) {
   const firstName = settings?.firstName || 'User';
   const currency  = settings?.currency  || 'PHP';
   const balance   = settings?.walletBalance ?? 0;
+  const bankTotal  = (settings?.bankAccounts || []).reduce((sum, bank) => sum + (Number(bank.balance) || 0), 0);
 
   return (
     <Modal
@@ -137,6 +141,7 @@ export default function DrawerMenu({ visible, onClose, navigation }) {
             {formatCurrency(balance, currency)}
           </Text>
           <Text style={styles.drawerBalanceLabel}>Wallet Balance</Text>
+          <Text style={[styles.drawerSub, { color: 'rgba(255,255,255,0.75)' }]}>Bank: {formatCurrency(bankTotal, currency)}</Text>
 
           {/* Theme toggle in header */}
           <TouchableOpacity
@@ -240,6 +245,12 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     fontWeight: '500',
     letterSpacing: 0.5,
+  },
+  drawerSub: {
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.25,
+    marginTop: 6,
   },
   themeBtn: {
     position: 'absolute',

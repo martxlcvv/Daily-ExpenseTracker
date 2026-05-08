@@ -20,12 +20,13 @@ const DEFAULT_SETTINGS = {
   currency: 'PHP',
   notificationsEnabled: false,
   darkMode: true,
-  monthlyBudget: 15000,
+  monthlyBudget: 0,
   walletBalance: 15000,
   hideWallet: false,
   shoppingList: [],
   plannedPayments: [],
   shoppingCategories: [],
+  bankAccounts: [],
   firstName: '',
   notifHour: 20,
 };
@@ -72,20 +73,48 @@ export const ExpenseProvider = ({ children }) => {
   const todayTotal = useMemo(() => todayExpenses.reduce((s, e) => s + e.amount, 0), [todayExpenses]);
   const weekTotal  = useMemo(() => weekExpenses.reduce((s, e) => s + e.amount, 0), [weekExpenses]);
   const monthTotal = useMemo(() => monthExpenses.reduce((s, e) => s + e.amount, 0), [monthExpenses]);
-  const currentBalance = settings.walletBalance ?? 0;
+  const currentBalance = useMemo(() => {
+    // If user has manually set wallet balance, use it; otherwise calculate from budget
+    if (settings.walletBalance !== undefined && settings.walletBalance !== null) {
+      return settings.walletBalance;
+    }
+    // Calculate: monthly budget - monthly expenses
+    return Math.max(0, (settings.monthlyBudget || 0) - monthTotal);
+  }, [settings.walletBalance, settings.monthlyBudget, monthTotal]);
+  const bankAccounts = settings.bankAccounts || [];
+  const bankTotal = useMemo(
+    () => bankAccounts.reduce((sum, account) => sum + (Number(account.balance) || 0), 0),
+    [bankAccounts]
+  );
 
   // ── Settings ─────────────────────────────────────────────────────────────
   const updateSettings = useCallback(async (key, value) => {
     try {
       setSettings((prev) => {
         const next = { ...prev, [key]: value };
+        
+        // When monthly budget changes, recalculate wallet balance
+        if (key === 'monthlyBudget') {
+          next.walletBalance = Math.max(0, value - monthTotal);
+        }
+        
         saveSettings(next);   // fire-and-forget persists
         return next;
       });
     } catch (e) {
       console.error('updateSettings error:', e);
     }
-  }, []);
+  }, [monthTotal]);
+
+  // ── Add to Wallet ─────────────────────────────────────────────────────────
+  const addToWallet = useCallback(async (amount) => {
+    try {
+      const newBalance = (settings.walletBalance ?? 0) + amount;
+      await updateSettings('walletBalance', newBalance);
+    } catch (e) {
+      console.error('addToWallet error:', e);
+    }
+  }, [settings.walletBalance, updateSettings]);
 
   // ── Expenses ──────────────────────────────────────────────────────────────
   const addExpense = useCallback(async (expenseData) => {
@@ -221,6 +250,41 @@ export const ExpenseProvider = ({ children }) => {
   }, [settings.hideWallet, updateSettings]);
 
   // ── Context value ─────────────────────────────────────────────────────────
+  const addBankAccount = useCallback(async (account) => {
+    try {
+      const next = [...bankAccounts, { id: Date.now().toString() + Math.random().toString(36).slice(2, 6), ...account }];
+      await updateSettings('bankAccounts', next);
+      return next;
+    } catch (e) {
+      console.error('addBankAccount error:', e);
+      return bankAccounts;
+    }
+  }, [bankAccounts, updateSettings]);
+
+  const updateBankAccount = useCallback(async (id, updatedData) => {
+    try {
+      const next = bankAccounts.map((account) =>
+        account.id === id ? { ...account, ...updatedData } : account
+      );
+      await updateSettings('bankAccounts', next);
+      return next;
+    } catch (e) {
+      console.error('updateBankAccount error:', e);
+      return bankAccounts;
+    }
+  }, [bankAccounts, updateSettings]);
+
+  const removeBankAccount = useCallback(async (id) => {
+    try {
+      const next = bankAccounts.filter((account) => account.id !== id);
+      await updateSettings('bankAccounts', next);
+      return next;
+    } catch (e) {
+      console.error('removeBankAccount error:', e);
+      return bankAccounts;
+    }
+  }, [bankAccounts, updateSettings]);
+
   const value = {
     expenses,
     settings,
@@ -232,6 +296,8 @@ export const ExpenseProvider = ({ children }) => {
     weekTotal,
     monthTotal,
     currentBalance,
+    bankAccounts,
+    bankTotal,
     addExpense,
     updateExpense,
     deleteExpense,
@@ -239,6 +305,10 @@ export const ExpenseProvider = ({ children }) => {
     getExpenseById,
     searchExpenses,
     updateSettings,
+    addToWallet,
+    addBankAccount,
+    updateBankAccount,
+    removeBankAccount,
     addShoppingItem,
     removeShoppingItem,
     updateShoppingItem,

@@ -7,15 +7,18 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
-  Easing,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+    Alert,
+    Animated,
+    Easing,
+    Modal,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+    useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DrawerMenu from '../components/common/DrawerMenu';
@@ -34,10 +37,10 @@ const AVATAR_MESSAGES = [
   'Sana all may savings, ikaw na maging una! 🔥',
   'Grabe, ang ganda ng swag mo pero kumusta wallet? 😭',
   'Pag nag-ipon ka ngayon, flex mo bukas! 💪',
-  'Tara analytics check, seryoso 'to ha? 👀',
+  `Tara analytics check, seryoso 'to ha? 👀`,
   'Alam mo ba, ang pera na hindi sinusubaybayan ay pera na nawawala! 🤑',
-  'Lowkey proud sa 'yo pag nag-budget ka, ikaw? 🫶',
-  'Basta laban lang sa expenses, kaya natin 'to! ✨',
+  `Lowkey proud sa 'yo pag nag-budget ka, ikaw? 🫶`,
+  `Basta laban lang sa expenses, kaya natin 'to! ✨`,
   'Huwag impulse buy today, mag-invest na tayo! 🚀',
 ];
 
@@ -147,7 +150,8 @@ const DashboardScreen = ({ navigation }) => {
 
   const {
     expenses, settings, todayTotal, weekTotal, monthTotal,
-    currentBalance, toggleHideWallet, deleteExpense,
+    currentBalance, bankAccounts, bankTotal, toggleHideWallet, deleteExpense,
+    updateSettings,
   } = useExpenses();
 
   const [refreshing,  setRefreshing]  = useState(false);
@@ -156,6 +160,8 @@ const DashboardScreen = ({ navigation }) => {
   const [avatarMsg,   setAvatarMsg]   = useState('');
   const [isSpeaking,  setIsSpeaking]  = useState(false);
   const [msgIdx,      setMsgIdx]      = useState(0);
+  const [showWalletEdit, setShowWalletEdit] = useState(false);
+  const [walletInput, setWalletInput] = useState(String(currentBalance));
 
   const fabAnim  = useRef(new Animated.Value(0)).current;
   const fabScale = useRef(new Animated.Value(1)).current;
@@ -197,6 +203,22 @@ const DashboardScreen = ({ navigation }) => {
     setHideBalance((v) => !v);
     toggleHideWallet?.();
   }, [toggleHideWallet]);
+
+  const handleWalletEdit = useCallback(() => {
+    setWalletInput(String(currentBalance));
+    setShowWalletEdit(true);
+  }, [currentBalance]);
+
+  const handleWalletSave = useCallback(async () => {
+    const value = Number(walletInput);
+    if (isNaN(value) || value < 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid wallet balance.');
+      return;
+    }
+    await updateSettings('walletBalance', value);
+    setShowWalletEdit(false);
+    Alert.alert('Success', `Wallet balance updated to ${formatCurrency(value, currency)}`);
+  }, [walletInput, updateSettings, currency]);
 
   const fabPressIn  = () => Animated.spring(fabScale, { toValue: 0.87, useNativeDriver: true, speed: 40 }).start();
   const fabPressOut = () => Animated.spring(fabScale, { toValue: 1,    useNativeDriver: true, speed: 20 }).start();
@@ -294,12 +316,27 @@ const DashboardScreen = ({ navigation }) => {
               <View style={s.heroTop}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.heroCaption}>💳  WALLET BALANCE</Text>
-                  <Text style={s.heroAmount} numberOfLines={1} adjustsFontSizeToFit>
-                    {hideBalance ? '•  •  •  •  •  •' : formatCurrency(currentBalance, currency)}
-                  </Text>
+                  <TouchableOpacity onPress={handleWalletEdit} activeOpacity={0.7}>
+                    <Text style={s.heroAmount} numberOfLines={1} adjustsFontSizeToFit>
+                      {hideBalance ? '•  •  •  •  •  •' : formatCurrency(currentBalance, currency)}
+                    </Text>
+                  </TouchableOpacity>
                   <Text style={s.heroSub}>
                     {expenses.length} expense{expenses.length !== 1 ? 's' : ''} recorded
                   </Text>
+                  <View style={s.heroBadgeRow}>
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate('BankAccounts')}
+                      activeOpacity={0.8}
+                      style={s.heroBadge}
+                    >
+                      <MaterialIcons name="account-balance" size={14} color="#FFFFFF" />
+                      <Text style={s.heroBadgeText} numberOfLines={1}>
+                        {bankAccounts.length} Bank acct{bankAccounts.length !== 1 ? 's' : ''} · {formatCurrency(bankTotal, currency)}
+                      </Text>
+                      <MaterialIcons name="chevron-right" size={16} color="#FFFFFF" style={s.heroBadgeChevron} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 <View style={s.heroActions}>
                   <TouchableOpacity onPress={toggleBalance} style={s.heroBtn} activeOpacity={0.8}>
@@ -352,15 +389,41 @@ const DashboardScreen = ({ navigation }) => {
             </View>
           </FadeSlide>
 
+          <FadeSlide delay={160}>
+            <View style={[s.bankPanel, { marginBottom: 26, backgroundColor: colors.card, borderColor: colors.separator }]}> 
+              <View style={s.bankPanelHeader}>
+                <View>
+                  <Text style={[s.bankPanelTitle, { color: colors.text }]}>Bank Snapshot</Text>
+                  <Text style={[s.bankPanelSubtitle, { color: colors.textSecondary }]}>Track saved accounts outside wallet.</Text>
+                </View>
+                <TouchableOpacity onPress={() => navigation.navigate('BankAccounts')} style={[s.bankPanelAction, { backgroundColor: colors.primary }]}> 
+                  <MaterialIcons name="account-balance" size={18} color="#FFF" />
+                </TouchableOpacity>
+              </View>
+              <View style={s.bankPanelStats}>
+                <View style={s.bankStatItem}>
+                  <Text style={[s.bankStatLabel, { color: colors.textSecondary }]}>Total Bank</Text>
+                  <Text style={[s.bankStatValue, { color: colors.text }]}>{formatCurrency(bankTotal, currency)}</Text>
+                </View>
+                <View style={s.bankStatItem}>
+                  <Text style={[s.bankStatLabel, { color: colors.textSecondary }]}>Accounts</Text>
+                  <Text style={[s.bankStatValue, { color: colors.text }]}>{bankAccounts.length}</Text>
+                </View>
+              </View>
+            </View>
+          </FadeSlide>
+
           {/* ── Quick Actions ──────────────────────────────── */}
           <FadeSlide delay={180}>
             <View style={[s.quickRow, { marginBottom: 26 }]}>
               {[
                 { icon: 'add-circle',  label: 'Add',       color: '#6C63FF', onPress: () => navigation.navigate('AddExpense', { mode: 'add' }) },
+                { icon: 'account-balance', label: 'Bank', color: '#10B981', onPress: () => navigation.navigate('BankAccounts') },
                 { icon: 'search',      label: 'Search',    color: '#43D9AD', onPress: () => navigation.navigate('Search') },
                 { icon: 'insights',    label: 'Analytics', color: '#FF8C42', onPress: () => navigation.navigate('Home', { screen: 'Analytics' }) },
                 { icon: 'shopping-cart', label: 'Shopping', color: '#F7B731', onPress: () => navigation.navigate('ShoppingList') },
               ].map((q) => (
+
                 <TouchableOpacity
                   key={q.label}
                   onPress={q.onPress}
@@ -505,6 +568,38 @@ const DashboardScreen = ({ navigation }) => {
           transform: [{ scale: pulseAnim }],
         }]} />
       </Animated.View>
+
+      {/* Wallet Edit Modal */}
+      <Modal visible={showWalletEdit} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={[s.modalContent, { backgroundColor: colors.card }]}>
+            <Text style={[s.modalTitle, { color: colors.text }]}>Edit Wallet Balance</Text>
+            <TextInput
+              style={[s.modalInput, { color: colors.text, borderColor: colors.separator }]}
+              value={walletInput}
+              onChangeText={setWalletInput}
+              keyboardType="decimal-pad"
+              placeholder="Enter amount"
+              placeholderTextColor={colors.textTertiary}
+              autoFocus
+            />
+            <View style={s.modalButtons}>
+              <TouchableOpacity
+                onPress={() => setShowWalletEdit(false)}
+                style={[s.modalBtn, { backgroundColor: colors.surfaceSecondary }]}
+              >
+                <Text style={[s.modalBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleWalletSave}
+                style={[s.modalBtn, { backgroundColor: colors.primary }]}
+              >
+                <Text style={[s.modalBtnText, { color: '#FFFFFF' }]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -541,6 +636,10 @@ const s = StyleSheet.create({
   heroCaption: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: 'rgba(255,255,255,0.55)', marginBottom: 8 },
   heroAmount: { fontSize: 36, fontWeight: '800', color: '#FFFFFF', letterSpacing: -1.5, marginBottom: 4 },
   heroSub: { fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+  heroBadgeRow: { marginTop: 10 },
+  heroBadge: { marginTop: 8, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 18, paddingVertical: 6, paddingHorizontal: 10 },
+  heroBadgeText: { fontSize: 11, color: '#FFFFFF', fontWeight: '700', marginLeft: 4 },
+  heroBadgeChevron: { marginLeft: 8, opacity: 0.8 },
   heroBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.13)', alignItems: 'center', justifyContent: 'center' },
 
   statsStrip: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.22)', borderRadius: 18, paddingVertical: 13 },
@@ -558,6 +657,16 @@ const s = StyleSheet.create({
   quickBtn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 20, borderWidth: 1, gap: 7, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, shadowOpacity: 0.07 },
   quickIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   quickLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
+
+  bankPanel: { borderRadius: 24, borderWidth: 1, padding: 18, elevation: 2, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, shadowOpacity: 0.08 },
+  bankPanelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  bankPanelTitle: { fontSize: 15, fontWeight: '800' },
+  bankPanelSubtitle: { fontSize: 12, marginTop: 4 },
+  bankPanelAction: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  bankPanelStats: { flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
+  bankStatItem: { flex: 1 },
+  bankStatLabel: { fontSize: 11, fontWeight: '600', marginBottom: 4 },
+  bankStatValue: { fontSize: 16, fontWeight: '800' },
 
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontSize: 17, fontWeight: '800', letterSpacing: -0.4 },
@@ -587,6 +696,15 @@ const s = StyleSheet.create({
   fab: { position: 'absolute', zIndex: 99 },
   fabBtn: { width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center', elevation: 12, shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, shadowOpacity: 0.45 },
   fabRipple: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 2, top: -9, left: -9 },
+
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { width: '80%', borderRadius: 20, padding: 20, elevation: 10, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, shadowOpacity: 0.3 },
+  modalTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 20 },
+  modalInput: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16, marginBottom: 20 },
+  modalButtons: { flexDirection: 'row', gap: 12 },
+  modalBtn: { flex: 1, padding: 12, borderRadius: 10, alignItems: 'center' },
+  modalBtnText: { fontSize: 16, fontWeight: '600' },
 });
 
 export default DashboardScreen;

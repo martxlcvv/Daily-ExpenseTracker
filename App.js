@@ -1,8 +1,43 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { ExpenseProvider, useExpenses } from './src/context/ExpenseContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import AppNavigator from './src/navigation/AppNavigator';
+
+// ── Error Boundary ───────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('App crashed:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0D1117', padding: 20 }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 18, marginBottom: 10 }}>Oops! May error sa app 😅</Text>
+          <Text style={{ color: '#CCCCCC', fontSize: 14, textAlign: 'center' }}>
+            {this.state.error?.message || 'Unknown error'}
+          </Text>
+          <Text style={{ color: '#AAAAAA', fontSize: 12, marginTop: 20, textAlign: 'center' }}>
+            Try restarting the app or clearing data.
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ── Spinner ──────────────────────────────────────────────────────────────────
 
 // ── Spinner ──────────────────────────────────────────────────────────────────
 const Spinner = ({ size = 40, color = '#FFFFFF', trackOpacity = 0.18, strokeWidth = 3 }) => {
@@ -136,11 +171,13 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <ExpenseProvider>
-        <AppContent />
-      </ExpenseProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <ExpenseProvider>
+          <AppContent />
+        </ExpenseProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

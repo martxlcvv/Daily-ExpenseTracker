@@ -15,6 +15,8 @@ export const getExpenses = async () => {
     return raw ? JSON.parse(raw) : [];
   } catch (e) {
     console.error('StorageService.getExpenses error:', e);
+    // Clear corrupted data
+    await AsyncStorage.removeItem(KEYS.EXPENSES);
     return [];
   }
 };
@@ -102,17 +104,32 @@ export const getSettings = async () => {
           notificationsEnabled: false,
           notificationTime: '20:00',
           darkMode: true,
-          monthlyBudget: 15000,
+          monthlyBudget: 0,
           walletBalance: 15000,
           hideWallet: false,
           shoppingList: [],
           plannedPayments: [],
+          bankAccounts: [],
           feedbackEntries: [],
           donationNumber: '09171234567',
         };
   } catch (e) {
     console.error('StorageService.getSettings error:', e);
-    return { currency: 'PHP', notificationsEnabled: false, darkMode: true, monthlyBudget: 15000 };
+    // Clear corrupted data
+    await AsyncStorage.removeItem(KEYS.SETTINGS);
+    return {
+      currency: 'PHP',
+      notificationsEnabled: false,
+      darkMode: true,
+      monthlyBudget: 0,
+      walletBalance: 15000,
+      hideWallet: false,
+      shoppingList: [],
+      plannedPayments: [],
+      bankAccounts: [],
+      feedbackEntries: [],
+      donationNumber: '09171234567',
+    };
   }
 };
 
@@ -166,6 +183,7 @@ export const getDeleteHistory = async () => {
     return raw ? JSON.parse(raw) : [];
   } catch (e) {
     console.error('StorageService.getDeleteHistory error:', e);
+    await AsyncStorage.removeItem(KEYS.DELETE_HISTORY);
     return [];
   }
 };

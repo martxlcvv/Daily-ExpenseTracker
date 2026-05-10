@@ -15,6 +15,7 @@ const AnimatedView = ({
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const animationRef = useRef(null);
 
   useEffect(() => {
     let animationSequence = [];
@@ -81,8 +82,15 @@ const AnimatedView = ({
       delay > 0 ? [Animated.delay(delay), ...animationSequence] : animationSequence
     );
 
+    animationRef.current = delayedAnimation;
     delayedAnimation.start();
-  }, [animation, duration, delay]);
+
+    return () => {
+      if (animationRef.current) {
+        animationRef.current.stop();
+      }
+    };
+  }, [animation, duration, delay, fadeAnim, slideAnim, scaleAnim]);
 
   const animatedStyle = {
     opacity: fadeAnim,

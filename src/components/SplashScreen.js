@@ -35,17 +35,22 @@ const SplashScreen = ({ onFinish }) => {
       }),
     ]).start();
 
-    // Spinner animation
-    Animated.loop(
+    // Spinner animation - store reference to stop it later
+    let spinAnimation;
+    spinAnimation = Animated.loop(
       Animated.timing(spin, {
         toValue: 1,
         duration: 1100,
         useNativeDriver: true,
       })
-    ).start();
+    );
+    spinAnimation.start();
 
     // Auto-dismiss after 2.5 s
     const t = setTimeout(() => {
+      // Stop the spinner animation before fading out
+      spinAnimation?.stop();
+      
       Animated.timing(fade, {
         toValue: 0,
         duration: 450,
@@ -53,7 +58,10 @@ const SplashScreen = ({ onFinish }) => {
       }).start(() => onFinish?.());
     }, 2500);
 
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      spinAnimation?.stop();
+    };
   }, [onFinish]);
 
   const rotate = spin.interpolate({

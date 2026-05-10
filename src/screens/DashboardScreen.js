@@ -7,18 +7,18 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    Easing,
-    Modal,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-    useWindowDimensions
+  Alert,
+  Animated,
+  Easing,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DrawerMenu from '../components/common/DrawerMenu';
@@ -48,8 +48,10 @@ const AVATAR_MESSAGES = [
 const FadeSlide = ({ children, delay = 0, style }) => {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(22)).current;
+  const animRef = useRef(null);
+  
   useEffect(() => {
-    Animated.parallel([
+    const anim = Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1, duration: 420, delay,
         easing: Easing.out(Easing.cubic), useNativeDriver: true,
@@ -58,8 +60,15 @@ const FadeSlide = ({ children, delay = 0, style }) => {
         toValue: 0, duration: 380, delay,
         easing: Easing.out(Easing.cubic), useNativeDriver: true,
       }),
-    ]).start();
-  }, []);
+    ]);
+    animRef.current = anim;
+    anim.start();
+    
+    return () => {
+      animRef.current?.stop();
+    };
+  }, [delay]);
+  
   return (
     <Animated.View style={[{ opacity, transform: [{ translateY }] }, style]}>
       {children}
@@ -71,10 +80,23 @@ const FadeSlide = ({ children, delay = 0, style }) => {
 const BudgetMeter = ({ spent, budget, currency }) => {
   const { colors } = useTheme();
   const anim = useRef(new Animated.Value(0)).current;
+  const animRef = useRef(null);
   const pct  = budget > 0 ? Math.min(spent / budget, 1) : 0;
 
   useEffect(() => {
-    Animated.timing(anim, { toValue: pct, duration: 1000, delay: 400, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    const animation = Animated.timing(anim, { 
+      toValue: pct, 
+      duration: 1000, 
+      delay: 400, 
+      easing: Easing.out(Easing.cubic), 
+      useNativeDriver: false 
+    });
+    animRef.current = animation;
+    animation.start();
+    
+    return () => {
+      animRef.current?.stop();
+    };
   }, [pct]);
 
   const barColor = pct > 0.85 ? '#FF5252' : pct > 0.6 ? '#FFB347' : '#43D9AD';
@@ -116,12 +138,21 @@ const StatPill = ({ label, value, icon, color, delay }) => {
   const { colors } = useTheme();
   const scale = useRef(new Animated.Value(0.8)).current;
   const fade  = useRef(new Animated.Value(0)).current;
+  const animRef = useRef(null);
+  
   useEffect(() => {
-    Animated.parallel([
+    const anim = Animated.parallel([
       Animated.spring(scale, { toValue: 1, delay, damping: 14, stiffness: 150, useNativeDriver: true }),
       Animated.timing(fade,  { toValue: 1, duration: 350, delay, useNativeDriver: true }),
-    ]).start();
+    ]);
+    animRef.current = anim;
+    anim.start();
+    
+    return () => {
+      animRef.current?.stop();
+    };
   }, []);
+  
   return (
     <Animated.View style={{ opacity: fade, transform: [{ scale }], flex: 1 }}>
       <View style={[sp.card, { backgroundColor: colors.card, borderColor: color + '25' }]}>
@@ -136,10 +167,10 @@ const StatPill = ({ label, value, icon, color, delay }) => {
 };
 
 const sp = StyleSheet.create({
-  card: { borderRadius: 16, padding: 12, borderWidth: 1, gap: 4, alignItems: 'flex-start' },
-  icon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
-  val: { fontSize: 14, fontWeight: '800', letterSpacing: -0.3 },
-  label: { fontSize: 10, fontWeight: '600', letterSpacing: 0.2 },
+  card: { borderRadius: 14, padding: 10, borderWidth: 1, gap: 3, alignItems: 'flex-start' },
+  icon: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 1 },
+  val: { fontSize: 13, fontWeight: '800', letterSpacing: -0.2 },
+  label: { fontSize: 9, fontWeight: '600', letterSpacing: 0.1 },
 });
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -167,15 +198,26 @@ const DashboardScreen = ({ navigation }) => {
   const fabScale = useRef(new Animated.Value(1)).current;
   const scrollY  = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const fabAnimRef = useRef(null);
+  const pulseAnimRef = useRef(null);
 
   // FAB entrance + pulse
   useEffect(() => {
-    Animated.spring(fabAnim, { toValue: 1, delay: 700, useNativeDriver: true, damping: 12, stiffness: 110 }).start();
+    const fabSpring = Animated.spring(fabAnim, { toValue: 1, delay: 700, useNativeDriver: true, damping: 12, stiffness: 110 });
+    fabAnimRef.current = fabSpring;
+    fabSpring.start();
 
-    Animated.loop(Animated.sequence([
+    const pulseLoop = Animated.loop(Animated.sequence([
       Animated.timing(pulseAnim, { toValue: 1.06, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-    ])).start();
+    ]));
+    pulseAnimRef.current = pulseLoop;
+    pulseLoop.start();
+
+    return () => {
+      fabAnimRef.current?.stop();
+      pulseAnimRef.current?.stop();
+    };
   }, []);
 
   // Avatar speaking cycle with Tagalog Gen-Z messages
@@ -560,7 +602,7 @@ const DashboardScreen = ({ navigation }) => {
           activeOpacity={1}
           style={[s.fabBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
         >
-          <MaterialIcons name="add" size={30} color="#FFFFFF" />
+          <MaterialIcons name="add" size={26} color="#FFFFFF" />
         </TouchableOpacity>
         {/* Ripple ring */}
         <Animated.View style={[s.fabRipple, {
@@ -607,7 +649,7 @@ const DashboardScreen = ({ navigation }) => {
 const s = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  scroll: { paddingTop: 6, paddingBottom: 20 },
+  scroll: { paddingTop: 4, paddingBottom: 16 },
 
   stickyBar: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
@@ -615,15 +657,15 @@ const s = StyleSheet.create({
   },
   stickyTitle: { fontSize: 16, fontWeight: '700' },
 
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  menuBtn: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  menuBtn: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   greetBlock: { flex: 1, paddingLeft: 2 },
   greetSub:  { fontSize: 12, fontWeight: '400', marginBottom: 1 },
   greetName: { fontSize: 22, fontWeight: '800', letterSpacing: -0.7 },
 
   // Hero card
   heroCard: {
-    borderRadius: 28, padding: 22, marginBottom: 16,
+    borderRadius: 24, padding: 18, marginBottom: 12,
     overflow: 'hidden', elevation: 12,
     shadowOffset: { width: 0, height: 12 }, shadowRadius: 30, shadowOpacity: 0.3,
   },
@@ -633,9 +675,9 @@ const s = StyleSheet.create({
 
   heroTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
   heroActions: { alignItems: 'center' },
-  heroCaption: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: 'rgba(255,255,255,0.55)', marginBottom: 8 },
-  heroAmount: { fontSize: 36, fontWeight: '800', color: '#FFFFFF', letterSpacing: -1.5, marginBottom: 4 },
-  heroSub: { fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+  heroCaption: { fontSize: 9, fontWeight: '700', letterSpacing: 1.5, color: 'rgba(255,255,255,0.55)', marginBottom: 6 },
+  heroAmount: { fontSize: 32, fontWeight: '800', color: '#FFFFFF', letterSpacing: -1.2, marginBottom: 2 },
+  heroSub: { fontSize: 10, color: 'rgba(255,255,255,0.45)', marginTop: 1 },
   heroBadgeRow: { marginTop: 10 },
   heroBadge: { marginTop: 8, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 18, paddingVertical: 6, paddingHorizontal: 10 },
   heroBadgeText: { fontSize: 11, color: '#FFFFFF', fontWeight: '700', marginLeft: 4 },
@@ -650,52 +692,52 @@ const s = StyleSheet.create({
   statVal: { fontSize: 13, color: '#FFFFFF', fontWeight: '800', letterSpacing: -0.3 },
 
   // Stat pills
-  statPillsRow: { flexDirection: 'row', gap: 10 },
+  statPillsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
 
   // Quick actions
-  quickRow: { flexDirection: 'row', gap: 10 },
-  quickBtn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 20, borderWidth: 1, gap: 7, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, shadowOpacity: 0.07 },
-  quickIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  quickLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.2 },
+  quickRow: { flexDirection: 'row', gap: 8 },
+  quickBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 16, borderWidth: 1, gap: 6, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, shadowOpacity: 0.07 },
+  quickIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  quickLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.1 },
 
-  bankPanel: { borderRadius: 24, borderWidth: 1, padding: 18, elevation: 2, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, shadowOpacity: 0.08 },
+  bankPanel: { borderRadius: 20, borderWidth: 1, padding: 14, elevation: 2, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, shadowOpacity: 0.08 },
   bankPanelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  bankPanelTitle: { fontSize: 15, fontWeight: '800' },
-  bankPanelSubtitle: { fontSize: 12, marginTop: 4 },
-  bankPanelAction: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  bankPanelTitle: { fontSize: 14, fontWeight: '800' },
+  bankPanelSubtitle: { fontSize: 11, marginTop: 3 },
+  bankPanelAction: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   bankPanelStats: { flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
   bankStatItem: { flex: 1 },
-  bankStatLabel: { fontSize: 11, fontWeight: '600', marginBottom: 4 },
-  bankStatValue: { fontSize: 16, fontWeight: '800' },
+  bankStatLabel: { fontSize: 10, fontWeight: '600', marginBottom: 2 },
+  bankStatValue: { fontSize: 15, fontWeight: '800' },
 
-  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { fontSize: 17, fontWeight: '800', letterSpacing: -0.4 },
-  seeAll: { fontSize: 12, fontWeight: '700' },
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  sectionTitle: { fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
+  seeAll: { fontSize: 11, fontWeight: '700' },
 
   // Category cards
-  catCard: { width: 118, padding: 14, borderRadius: 22, borderWidth: 1, gap: 5, elevation: 3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.14 },
-  catIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
-  catName: { fontSize: 11, fontWeight: '600', letterSpacing: 0.1 },
-  catAmt:  { fontSize: 15, fontWeight: '800', letterSpacing: -0.4 },
+  catCard: { width: 110, padding: 12, borderRadius: 18, borderWidth: 1, gap: 4, elevation: 3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.14 },
+  catIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginBottom: 1 },
+  catName: { fontSize: 10, fontWeight: '600', letterSpacing: 0.05 },
+  catAmt:  { fontSize: 14, fontWeight: '800', letterSpacing: -0.3 },
   catMiniBar: { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 4 },
   catMiniBarFill: { height: '100%', borderRadius: 2 },
 
   // Expense groups
-  groupCard: { borderRadius: 22, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
-  groupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  groupCard: { borderRadius: 18, borderWidth: 1, marginBottom: 10, overflow: 'hidden' },
+  groupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
   groupDate:  { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   groupTotal: { fontSize: 13, fontWeight: '800' },
 
   // Reminder card
-  reminderCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 18, borderWidth: 1, marginBottom: 14, gap: 12, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, shadowOpacity: 0.06 },
-  reminderIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  reminderTitle: { fontSize: 13, fontWeight: '700' },
-  reminderSub: { fontSize: 11, marginTop: 2 },
+  reminderCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 16, borderWidth: 1, marginBottom: 12, gap: 10, elevation: 1, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6, shadowOpacity: 0.06 },
+  reminderIcon: { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  reminderTitle: { fontSize: 12, fontWeight: '700' },
+  reminderSub: { fontSize: 10, marginTop: 1 },
 
   // FAB
   fab: { position: 'absolute', zIndex: 99 },
-  fabBtn: { width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center', elevation: 12, shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, shadowOpacity: 0.45 },
-  fabRipple: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 2, top: -9, left: -9 },
+  fabBtn: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', elevation: 12, shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, shadowOpacity: 0.45 },
+  fabRipple: { position: 'absolute', width: 68, height: 68, borderRadius: 34, borderWidth: 2, top: -9, left: -9 },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },

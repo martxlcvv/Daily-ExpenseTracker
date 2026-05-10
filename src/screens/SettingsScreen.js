@@ -1,16 +1,17 @@
 /**
- * SettingsScreen.js — Improved
- * Fixes:
- *   • keyboardShouldPersistTaps="handled" → keyboard won't close while typing
- *   • Wallet balance editing with +/- quick buttons
- *   • Notification system (daily reminder + custom time)
- *   • Name auto-save on blur (no manual tap needed)
+ * SettingsScreen.js — Fixed
+ * FIXES:
+ *  1. KEYBOARD BUG: NameInput is now React.memo — parent re-renders from
+ *     updateSettings() no longer unmount/remount the Input, so keyboard stays open.
+ *  2. Profile card now shows avatar.png (squirrel) instead of hardcoded person icon.
+ *  3. Minimalist profile card — cleaner layout.
  */
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -36,9 +37,17 @@ import { formatCurrency } from '../utils/formatters';
 const CURRENCIES = [
   { code: 'PHP', symbol: '₱', name: 'Philippine Peso' },
   { code: 'USD', symbol: '$', name: 'US Dollar' },
-  { code: 'EUR', symbol: '€', name: 'Euro'        },
+  { code: 'EUR', symbol: '€', name: 'Euro' },
   { code: 'GBP', symbol: '£', name: 'British Pound' },
 ];
+
+// ── Avatar source (same path as UserAvatar.js) ────────────────────────────────
+let AVATAR_SRC = null;
+try {
+  AVATAR_SRC = require('../../assets/avatar.png');
+} catch {
+  AVATAR_SRC = null;
+}
 
 // ── SettingRow ────────────────────────────────────────────────────────────────
 const SettingRow = ({ icon, label, subtitle, right, onPress, color, style }) => {
@@ -55,7 +64,11 @@ const SettingRow = ({ icon, label, subtitle, right, onPress, color, style }) => 
       </View>
       <View style={sr.info}>
         <Text style={[sr.label, { color: colors.text }]}>{label}</Text>
-        {subtitle ? <Text style={[sr.sub, { color: colors.textSecondary }]} numberOfLines={1}>{subtitle}</Text> : null}
+        {subtitle ? (
+          <Text style={[sr.sub, { color: colors.textSecondary }]} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : null}
       </View>
       <View style={sr.right}>{right}</View>
     </TouchableOpacity>
@@ -63,13 +76,57 @@ const SettingRow = ({ icon, label, subtitle, right, onPress, color, style }) => 
 };
 
 const sr = StyleSheet.create({
-  row:  { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, gap: 12 },
-  icon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  info: { flex: 1, gap: 1 },
-  label:{ fontSize: 14, fontWeight: '500' },
-  sub:  { fontSize: 12 },
-  right:{ alignItems: 'flex-end' },
+  row:   { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, gap: 10 },
+  icon:  { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  info:  { flex: 1, gap: 1 },
+  label: { fontSize: 12, fontWeight: '500' },
+  sub:   { fontSize: 10 },
+  right: { alignItems: 'flex-end' },
 });
+
+// ── NameInput (MEMOIZED — KEY FIX for keyboard bug) ───────────────────────────
+// Because this is React.memo, when the parent SettingsScreen re-renders after
+// updateSettings(), this component does NOT re-render, so the Input keeps focus
+// and the keyboard stays open.
+const NameInput = React.memo(({ initialValue, onSave }) => {
+  const { colors } = useTheme();
+  const [value, setValue] = useState(initialValue);
+
+  const doSave = useCallback(() => {
+    if (value.trim()) onSave(value.trim());
+  }, [value, onSave]);
+
+  return (
+    <View style={[ni.row, { padding: 12 }]}>
+      <Input
+        label="Display Name"
+        value={value}
+        onChangeText={setValue}
+        placeholder="Your name"
+        icon="person-outline"
+        style={{ marginBottom: 0, flex: 1 }}
+        returnKeyType="done"
+        onSubmitEditing={doSave}
+        blurOnSubmit={false}
+      />
+      <TouchableOpacity
+        onPress={doSave}
+        style={[ni.saveBtn, { backgroundColor: colors.primary }]}
+      >
+        <MaterialIcons name="check" size={15} color="#FFFFFF" />
+      </TouchableOpacity>
+    </View>
+  );
+});
+NameInput.displayName = 'NameInput';
+
+const ni = StyleSheet.create({
+  row:     { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  saveBtn: { width: 40, height: 44, borderRadius: BorderRadius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+});
+
+// ── Need React import for React.memo ─────────────────────────────────────────
+import React from 'react';
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 const SettingsScreen = ({ navigation }) => {
@@ -85,21 +142,19 @@ const SettingsScreen = ({ navigation }) => {
   const [showWalletInput,    setShowWalletInput]    = useState(false);
   const [walletAmount,       setWalletAmount]       = useState(String(settings.walletBalance ?? 15000));
   const [hideWallet,         setHideWallet]         = useState(settings.hideWallet || false);
-  const [firstName,          setFirstName]          = useState(settings.firstName || '');
   const [notifHour,          setNotifHour]          = useState(String(settings.notifHour ?? 20));
 
-  // Sync wallet from context changes
   useEffect(() => {
     setWalletAmount(String(settings.walletBalance ?? 15000));
     setHideWallet(settings.hideWallet ?? false);
   }, [settings.walletBalance, settings.hideWallet]);
 
-  // Auto-save name on blur
-  const handleNameBlur = useCallback(async () => {
-    if (firstName.trim() && firstName.trim() !== settings.firstName) {
-      await updateSettings('firstName', firstName.trim());
+  // Stable callback for NameInput — won't change identity on every render
+  const handleNameSave = useCallback(async (name) => {
+    if (name && name !== settings.firstName) {
+      await updateSettings('firstName', name);
     }
-  }, [firstName, settings.firstName, updateSettings]);
+  }, [settings.firstName, updateSettings]);
 
   const handleNotifToggle = async (val) => {
     if (val) {
@@ -145,7 +200,6 @@ const SettingsScreen = ({ navigation }) => {
     Alert.alert('Saved', `Wallet set to ${formatCurrency(value, settings.currency)}`);
   };
 
-  // Quick +/- wallet adjustment
   const adjustWallet = (delta) => {
     const cur = Number(walletAmount) || 0;
     setWalletAmount(String(Math.max(0, cur + delta)));
@@ -177,11 +231,13 @@ const SettingsScreen = ({ navigation }) => {
   );
 
   const currencyInfo = CURRENCIES.find((c) => c.code === settings.currency) || CURRENCIES[0];
+  const displayName  = settings.firstName || 'User';
 
   return (
     <View style={[s.root, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <SafeAreaView style={s.safe} edges={['top']}>
+
         {/* Header */}
         <View style={[s.pageHeader, { paddingHorizontal: pad, borderBottomColor: colors.separator }]}>
           <TouchableOpacity
@@ -201,48 +257,47 @@ const SettingsScreen = ({ navigation }) => {
           <ScrollView
             contentContainerStyle={[s.scroll, { paddingHorizontal: pad }]}
             showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"   // ← FIX: keyboard stays open
+            keyboardShouldPersistTaps="always"
           >
-            {/* Profile card */}
+
+            {/* ── Profile card ── */}
             <LinearGradient
-              colors={['#6C63FF', '#8B85FF']}
+              colors={['#5A4FD1', '#7C75FF']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={s.profileCard}
             >
+              {/* Avatar — shows squirrel if avatar.png exists, else initials */}
               <View style={s.profileAvatarWrap}>
-                <MaterialIcons name="person" size={36} color="#FFFFFF" />
+                {AVATAR_SRC ? (
+                  <Image
+                    source={AVATAR_SRC}
+                    style={{ width: 64, height: 64, borderRadius: 32 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={s.profileAvatarFallback}>
+                    <Text style={s.profileAvatarInitials}>
+                      {displayName.slice(0, 2).toUpperCase() || '💰'}
+                    </Text>
+                  </View>
+                )}
               </View>
-              <Text style={s.profileName}>{settings.firstName || 'User'}</Text>
+              <Text style={s.profileName}>{displayName}</Text>
               <Text style={s.profileSub}>Daily Expense Tracker</Text>
               <Text style={s.profileVer}>v1.0.0</Text>
             </LinearGradient>
 
-            {/* PERSONALIZATION */}
+            {/* ── PERSONALIZATION ── */}
             <SectionHeader title="PERSONALIZATION" />
             <SectionCard>
-              <View style={[s.nameRow, { padding: 14 }]}>
-                <Input
-                  label="Display Name"
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  onBlur={handleNameBlur}         // auto-save
-                  placeholder="Your name"
-                  icon="person-outline"
-                  style={{ marginBottom: 0, flex: 1 }}
-                  blurOnSubmit={false}
-                  returnKeyType="done"
-                  onSubmitEditing={handleNameBlur}
-                />
-                <TouchableOpacity
-                  onPress={handleNameBlur}
-                  style={[s.saveBtn, { backgroundColor: colors.primary }]}
-                >
-                  <MaterialIcons name="check" size={16} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
+              {/* ✅ KEYBOARD FIX: NameInput is memoized — won't re-render on parent update */}
+              <NameInput
+                initialValue={settings.firstName || ''}
+                onSave={handleNameSave}
+              />
             </SectionCard>
 
-            {/* PREFERENCES */}
+            {/* ── PREFERENCES ── */}
             <SectionHeader title="PREFERENCES" />
             <SectionCard>
               <SettingRow
@@ -250,7 +305,14 @@ const SettingsScreen = ({ navigation }) => {
                 label="Dark Mode"
                 subtitle={isDark ? 'Enabled' : 'Disabled'}
                 color="#7C75FF"
-                right={<Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: '#7C75FF' }} thumbColor={isDark ? '#FFF' : '#F4F3F4'} />}
+                right={
+                  <Switch
+                    value={isDark}
+                    onValueChange={toggleTheme}
+                    trackColor={{ true: '#7C75FF' }}
+                    thumbColor={isDark ? '#FFF' : '#F4F3F4'}
+                  />
+                }
               />
               <SettingRow
                 icon="payments"
@@ -258,7 +320,13 @@ const SettingsScreen = ({ navigation }) => {
                 subtitle={`${currencyInfo.symbol} ${currencyInfo.name}`}
                 color="#FFB347"
                 onPress={() => setShowCurrencyPicker(!showCurrencyPicker)}
-                right={<MaterialIcons name={showCurrencyPicker ? 'expand-less' : 'expand-more'} size={18} color={colors.textTertiary} />}
+                right={
+                  <MaterialIcons
+                    name={showCurrencyPicker ? 'expand-less' : 'expand-more'}
+                    size={18}
+                    color={colors.textTertiary}
+                  />
+                }
                 style={{ borderBottomWidth: showCurrencyPicker ? 1 : 0 }}
               />
               {showCurrencyPicker && (
@@ -267,21 +335,26 @@ const SettingsScreen = ({ navigation }) => {
                     <TouchableOpacity
                       key={cur.code}
                       onPress={() => handleCurrencySelect(cur.code)}
-                      style={[s.pickerOpt, { backgroundColor: settings.currency === cur.code ? colors.primary + '15' : 'transparent' }]}
+                      style={[
+                        s.pickerOpt,
+                        { backgroundColor: settings.currency === cur.code ? colors.primary + '15' : 'transparent' },
+                      ]}
                     >
                       <Text style={[s.pickerSym, { color: colors.primary }]}>{cur.symbol}</Text>
                       <View style={{ flex: 1 }}>
                         <Text style={[s.pickerCode, { color: colors.text }]}>{cur.code}</Text>
                         <Text style={[s.pickerName, { color: colors.textSecondary }]}>{cur.name}</Text>
                       </View>
-                      {settings.currency === cur.code && <MaterialIcons name="check-circle" size={18} color={colors.primary} />}
+                      {settings.currency === cur.code && (
+                        <MaterialIcons name="check-circle" size={18} color={colors.primary} />
+                      )}
                     </TouchableOpacity>
                   ))}
                 </View>
               )}
             </SectionCard>
 
-            {/* NOTIFICATIONS */}
+            {/* ── NOTIFICATIONS ── */}
             <SectionHeader title="NOTIFICATIONS" />
             <SectionCard>
               <SettingRow
@@ -289,7 +362,14 @@ const SettingsScreen = ({ navigation }) => {
                 label="Daily Reminders"
                 subtitle={notifEnabled ? `Notified at ${settings.notifHour ?? 20}:00` : 'Reminders off'}
                 color="#43D9AD"
-                right={<Switch value={notifEnabled} onValueChange={handleNotifToggle} trackColor={{ true: '#43D9AD' }} thumbColor={notifEnabled ? '#FFF' : '#F4F3F4'} />}
+                right={
+                  <Switch
+                    value={notifEnabled}
+                    onValueChange={handleNotifToggle}
+                    trackColor={{ true: '#43D9AD' }}
+                    thumbColor={notifEnabled ? '#FFF' : '#F4F3F4'}
+                  />
+                }
               />
               {notifEnabled && (
                 <View style={[s.inputWrap, { borderTopColor: colors.separator }]}>
@@ -315,7 +395,7 @@ const SettingsScreen = ({ navigation }) => {
               )}
             </SectionCard>
 
-            {/* WALLET */}
+            {/* ── WALLET ── */}
             <SectionHeader title="WALLET" />
             <SectionCard>
               <SettingRow
@@ -324,23 +404,32 @@ const SettingsScreen = ({ navigation }) => {
                 subtitle={formatCurrency(settings.walletBalance || 0, settings.currency)}
                 color="#43D9AD"
                 onPress={() => setShowWalletInput(!showWalletInput)}
-                right={<MaterialIcons name={showWalletInput ? 'expand-less' : 'expand-more'} size={18} color={colors.textTertiary} />}
+                right={
+                  <MaterialIcons
+                    name={showWalletInput ? 'expand-less' : 'expand-more'}
+                    size={18}
+                    color={colors.textTertiary}
+                  />
+                }
               />
               {showWalletInput && (
                 <View style={[s.inputWrap, { borderTopColor: colors.separator }]}>
-                  {/* Quick adjust buttons */}
                   <View style={s.quickAdjust}>
                     {[-1000, -500, +500, +1000].map((delta) => (
                       <TouchableOpacity
                         key={delta}
                         onPress={() => adjustWallet(delta)}
-                        style={[s.adjBtn, {
-                          backgroundColor: delta < 0 ? '#FF525215' : '#43D9AD15',
-                          borderColor:     delta < 0 ? '#FF5252'   : '#43D9AD',
-                        }]}
+                        style={[
+                          s.adjBtn,
+                          {
+                            backgroundColor: delta < 0 ? '#FF525215' : '#43D9AD15',
+                            borderColor:     delta < 0 ? '#FF5252'   : '#43D9AD',
+                          },
+                        ]}
                       >
                         <Text style={[s.adjBtnLabel, { color: delta < 0 ? '#FF5252' : '#43D9AD' }]}>
-                          {delta > 0 ? '+' : ''}{delta >= 1000 || delta <= -1000 ? (delta / 1000) + 'k' : delta}
+                          {delta > 0 ? '+' : ''}
+                          {Math.abs(delta) >= 1000 ? (delta / 1000) + 'k' : delta}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -362,38 +451,53 @@ const SettingsScreen = ({ navigation }) => {
                 label="Hide Wallet Balance"
                 subtitle={hideWallet ? 'Hidden on dashboard' : 'Visible on dashboard'}
                 color="#7C75FF"
-                right={<Switch value={hideWallet} onValueChange={handleHideWalletToggle} trackColor={{ true: colors.primary }} thumbColor={hideWallet ? '#FFF' : '#F4F3F4'} />}
+                right={
+                  <Switch
+                    value={hideWallet}
+                    onValueChange={handleHideWalletToggle}
+                    trackColor={{ true: colors.primary }}
+                    thumbColor={hideWallet ? '#FFF' : '#F4F3F4'}
+                  />
+                }
                 style={{ borderBottomWidth: 0 }}
               />
             </SectionCard>
 
-            {/* SHOPPING LIST */}
+            {/* ── SHOPPING LIST ── */}
             <SectionHeader title="SHOPPING LIST" />
             <SectionCard>
               <SettingRow
                 icon="shopping-cart"
                 label="Shopping List"
-                subtitle={settings.shoppingList?.length ? `${settings.shoppingList.length} item(s)` : 'Empty'}
+                subtitle={
+                  settings.shoppingList?.length
+                    ? `${settings.shoppingList.length} item(s)`
+                    : 'Empty'
+                }
                 onPress={() => navigation.navigate('ShoppingList')}
                 right={<MaterialIcons name="chevron-right" size={18} color={colors.textTertiary} />}
                 style={{ borderBottomWidth: 0 }}
               />
             </SectionCard>
 
-            {/* PLANNED PAYMENTS */}
+            {/* ── PLANNED PAYMENTS ── */}
             <SectionHeader title="PLANNED PAYMENTS" />
             <SectionCard>
               <SettingRow
                 icon="event-note"
                 label="Planned Payments"
-                subtitle={settings.plannedPayments?.length ? `${settings.plannedPayments.length} payment(s)` : 'None planned'}
+                subtitle={
+                  settings.plannedPayments?.length
+                    ? `${settings.plannedPayments.length} payment(s)`
+                    : 'None planned'
+                }
                 onPress={() => navigation.navigate('PlannedPayments')}
                 right={<MaterialIcons name="chevron-right" size={18} color={colors.textTertiary} />}
                 style={{ borderBottomWidth: 0 }}
               />
             </SectionCard>
 
-            {/* BUDGET */}
+            {/* ── BUDGET ── */}
             <SectionHeader title="BUDGET" />
             <SectionCard>
               <SettingRow
@@ -402,7 +506,13 @@ const SettingsScreen = ({ navigation }) => {
                 subtitle={formatCurrency(settings.monthlyBudget || 15000, settings.currency)}
                 color="#FF6584"
                 onPress={() => setShowBudgetInput(!showBudgetInput)}
-                right={<MaterialIcons name={showBudgetInput ? 'expand-less' : 'edit'} size={18} color={colors.textTertiary} />}
+                right={
+                  <MaterialIcons
+                    name={showBudgetInput ? 'expand-less' : 'edit'}
+                    size={18}
+                    color={colors.textTertiary}
+                  />
+                }
                 style={{ borderBottomWidth: showBudgetInput ? 1 : 0 }}
               />
               {showBudgetInput && (
@@ -421,7 +531,7 @@ const SettingsScreen = ({ navigation }) => {
               )}
             </SectionCard>
 
-            {/* DATA */}
+            {/* ── DATA ── */}
             <SectionHeader title="DATA" />
             <SectionCard>
               <SettingRow
@@ -443,12 +553,12 @@ const SettingsScreen = ({ navigation }) => {
               />
             </SectionCard>
 
-            {/* ABOUT */}
+            {/* ── ABOUT ── */}
             <SectionHeader title="ABOUT" />
             <SectionCard>
-              <SettingRow icon="info-outline"  label="App Version"   subtitle="v1.0.0 (Build 1)"                        color="#74B9FF" />
-              <SettingRow icon="code"          label="Developed By"  subtitle="Raymart"                                  color="#A29BFE" />
-              <SettingRow icon="star-outline"  label="Daily Ledger"  subtitle="Track your expenses, reach your goals"   color="#FFE66D" style={{ borderBottomWidth: 0 }} />
+              <SettingRow icon="info-outline" label="App Version"  subtitle="v1.0.0 (Build 1)"                       color="#74B9FF" />
+              <SettingRow icon="code"         label="Developed By" subtitle="Raymart"                                 color="#A29BFE" />
+              <SettingRow icon="star-outline" label="Daily Ledger" subtitle="Track your expenses, reach your goals"  color="#FFE66D" style={{ borderBottomWidth: 0 }} />
             </SectionCard>
 
             <View style={{ height: 80 }} />
@@ -468,45 +578,50 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 10, borderBottomWidth: 1, marginBottom: 12,
   },
-  backBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  backBtn:   { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   pageTitle: { fontSize: FontSize.base, fontWeight: FontWeight.bold },
 
   profileCard: {
-    borderRadius: BorderRadius['2xl'], padding: Spacing.xl,
-    alignItems: 'center', marginBottom: Spacing.xl, overflow: 'hidden', gap: 4,
+    borderRadius: 18, padding: 16,
+    alignItems: 'center', marginBottom: 14, overflow: 'hidden', gap: 2,
   },
   profileAvatarWrap: {
-    width: 72, height: 72, borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 8,
+    width: 60, height: 60, borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 4, overflow: 'hidden',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)',
   },
-  profileName: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
-  profileSub:  { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
-  profileVer:  { fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+  profileAvatarFallback: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  profileAvatarInitials: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
+  profileName: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  profileSub:  { fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 0 },
+  profileVer:  { fontSize: 9, color: 'rgba(255,255,255,0.4)',  marginTop: 0 },
 
   secHdr: {
     fontSize: FontSize.xs, fontWeight: '600', letterSpacing: 0.8,
-    marginBottom: 6, marginTop: 4,
+    marginBottom: 3, marginTop: 2,
   },
-  secCard: { marginBottom: Spacing.xl, padding: 0, overflow: 'hidden' },
+  secCard: { marginBottom: 10, padding: 0, overflow: 'hidden' },
 
-  nameRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  saveBtn: { width: 44, height: 50, borderRadius: BorderRadius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  picker:     { borderTopWidth: 1, paddingVertical: 4 },
+  pickerOpt:  { flexDirection: 'row', alignItems: 'center', padding: 11, borderRadius: BorderRadius.md, marginHorizontal: 6, gap: 10 },
+  pickerSym:  { fontSize: 17, fontWeight: '700', width: 26, textAlign: 'center' },
+  pickerCode: { fontSize: 13, fontWeight: '600' },
+  pickerName: { fontSize: 11 },
 
-  picker:    { borderTopWidth: 1, paddingVertical: 6 },
-  pickerOpt: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: BorderRadius.md, marginHorizontal: 8, gap: 12 },
-  pickerSym: { fontSize: 18, fontWeight: '700', width: 28, textAlign: 'center' },
-  pickerCode:{ fontSize: 14, fontWeight: '600' },
-  pickerName:{ fontSize: 12 },
+  inputWrap:  { padding: 12, borderTopWidth: 1 },
+  inputLabel: { fontSize: FontSize.xs, fontWeight: '600', marginBottom: 7, letterSpacing: 0.3 },
+  notifRow:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  saveBtn:    { width: 44, height: 50, borderRadius: BorderRadius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
 
-  inputWrap: { padding: 14, borderTopWidth: 1 },
-  inputLabel:{ fontSize: FontSize.xs, fontWeight: '600', marginBottom: 8, letterSpacing: 0.3 },
-
-  notifRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 0 },
-
-  quickAdjust: { flexDirection: 'row', gap: 8, marginBottom: Spacing.md },
-  adjBtn: { flex: 1, paddingVertical: 8, borderRadius: BorderRadius.sm, borderWidth: 1, alignItems: 'center' },
-  adjBtnLabel: { fontSize: 13, fontWeight: '700' },
+  quickAdjust:  { flexDirection: 'row', gap: 7, marginBottom: Spacing.md },
+  adjBtn:       { flex: 1, paddingVertical: 7, borderRadius: BorderRadius.sm, borderWidth: 1, alignItems: 'center' },
+  adjBtnLabel:  { fontSize: 12, fontWeight: '700' },
 });
 
 export default SettingsScreen;
